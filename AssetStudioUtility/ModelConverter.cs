@@ -252,6 +252,12 @@ namespace AssetStudio
             var iMesh = new ImportedMesh();
             meshR.m_GameObject.TryGet(out var m_GameObject2);
             iMesh.Path = GetTransformPath(m_GameObject2.m_Transform);
+            if (iMesh.Path.IndexOf("LOD1", StringComparison.OrdinalIgnoreCase) != -1
+                || iMesh.Path.IndexOf("LOD2", StringComparison.OrdinalIgnoreCase) != -1
+
+                || iMesh.Path.IndexOf("shadow", StringComparison.OrdinalIgnoreCase) != -1)
+                return;
+
             iMesh.SubmeshList = new List<ImportedSubmesh>();
             var subHashSet = new HashSet<int>();
             var combine = false;
