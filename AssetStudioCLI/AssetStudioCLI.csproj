@@ -9,6 +9,7 @@
         <Copyright>Copyright © Perfare; Copyright © aelurum 2023-2024</Copyright>
         <PlatformTarget>AnyCPU</PlatformTarget>
         <DebugType>embedded</DebugType>
+        <Platforms>AnyCPU;x64</Platforms>
     </PropertyGroup>
 
     <ItemGroup>
@@ -19,14 +20,12 @@
         <ProjectReference Include="..\AssetStudioUtility\AssetStudioUtility.csproj" />
         <ProjectReference Include="..\AssetStudio\AssetStudio.csproj" />
     </ItemGroup>
-    
+
     <!-- Use local compiled win-x86 and win-x64 Texture2DDecoder libs, because libs from Kyaru.Texture2DDecoder.Windows were compiled with /MD flag -->
 
     <Target Name="CopyExtraFilesPortable" AfterTargets="AfterBuild" Condition=" '$(RuntimeIdentifier)' == '' ">
         <Message Text="Copying windows extra files for $(TargetFramework)... " Importance="high" />
-        <Copy SourceFiles="$(SolutionDir)AssetStudioFBXNative\bin\Win32\$(Configuration)\AssetStudioFBXNative.dll" DestinationFolder="$(TargetDir)runtimes\win-x86\native" ContinueOnError="false" />
         <Copy SourceFiles="$(SolutionDir)AssetStudioFBXNative\bin\x64\$(Configuration)\AssetStudioFBXNative.dll" DestinationFolder="$(TargetDir)runtimes\win-x64\native" ContinueOnError="false" />
-        <Copy SourceFiles="$(SolutionDir)Texture2DDecoderNative\bin\Win32\$(Configuration)\Texture2DDecoderNative.dll" DestinationFolder="$(TargetDir)runtimes\win-x86\native" ContinueOnError="false" />
         <Copy SourceFiles="$(SolutionDir)Texture2DDecoderNative\bin\x64\$(Configuration)\Texture2DDecoderNative.dll" DestinationFolder="$(TargetDir)runtimes\win-x64\native" ContinueOnError="false" />
         <Copy SourceFiles="$(ProjectDir)Libraries\win-x86\fmod.dll" DestinationFolder="$(TargetDir)runtimes\win-x86\native" ContinueOnError="false" />
         <Copy SourceFiles="$(ProjectDir)Libraries\win-x64\fmod.dll" DestinationFolder="$(TargetDir)runtimes\win-x64\native" ContinueOnError="false" />

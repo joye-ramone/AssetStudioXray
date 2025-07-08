@@ -5,6 +5,7 @@
     <Version>0.18.0.0</Version>
     <Copyright>Copyright © Perfare 2018-2022; Copyright © aelurum 2023-2024</Copyright>
     <DebugType>embedded</DebugType>
+    <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
   
   <ItemGroup>
