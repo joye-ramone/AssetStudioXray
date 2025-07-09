@@ -171,7 +171,7 @@ namespace AssetStudioCLI
             {
                 assetsManager.SetAssetFilter(CLIOptions.o_exportAssetTypes.Value);
             }
-            assetsManager.LoadFilesAndFolders(out _, CLIOptions.inputPathList);
+            assetsManager.LoadFilesAndFolders(out _, new List<string>(CLIOptions.inputPathList));
             if (assetsManager.assetsFileList.Count == 0)
             {
                 Logger.Warning("No Unity file can be loaded.");
@@ -879,24 +879,47 @@ namespace AssetStudioCLI
                 Progress.Reset();
                 k = 0;
 
+                var base_path = CLIOptions.inputPathList[0];
+                if (!base_path.EndsWith("\\"))
+                    base_path += "\\";
+
+                base_path = base_path.ToLower();
+
                 foreach (var gameObjectNode in exportableObjects)
                 {
                     var gameObject = gameObjectNode.gameObject;
                     var filename = FixFileName(gameObject.m_Name);
-                    var targetPath = $"{savePath}{filename}{Path.DirectorySeparatorChar}";
+
+                    string bundle_name = gameObject.assetsFile.originalPath.ToLowerInvariant().Replace(base_path, "");
+
+                    string subfolder = (Path.GetDirectoryName(bundle_name)) ?? string.Empty;
+                    //if (string.Equals(subfolder, filename, StringComparison.OrdinalIgnoreCase))
+                    //    subfolder = "";
+
+                    if (subfolder.EndsWith(filename, StringComparison.CurrentCultureIgnoreCase))
+                    {
+                        subfolder = subfolder.Substring(0, subfolder.Length - filename.Length);
+                    }
+
+                    //string targetPath = $"{savePath}{filename}{Path.DirectorySeparatorChar}";
+                    string targetPath = Path.Combine(savePath, subfolder, filename) + Path.DirectorySeparatorChar;
+
                     //重名文件处理
                     for (int i = 1; ; i++)
                     {
                         if (Directory.Exists(targetPath))
                         {
-                            targetPath = $"{savePath}{filename} ({i}){Path.DirectorySeparatorChar}";
+                            //targetPath = $"{savePath}{filename} ({i}){Path.DirectorySeparatorChar}";
+                            targetPath = Path.Combine(savePath, subfolder, filename) + $" ({i})" + Path.DirectorySeparatorChar;
                         }
                         else
                         {
                             break;
                         }
                     }
-                    Directory.CreateDirectory(targetPath);
+
+                    targetPath = targetPath.ToLowerInvariant();
+
                     //导出FBX
                     Logger.Info($"Exporting {filename}.fbx");
                     Progress.Report(k, exportableCount);
