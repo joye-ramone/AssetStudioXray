@@ -254,6 +254,8 @@ namespace AssetStudio
             iMesh.Path = GetTransformPath(m_GameObject2.m_Transform);
             if (iMesh.Path.IndexOf("LOD1", StringComparison.OrdinalIgnoreCase) != -1
                 || iMesh.Path.IndexOf("LOD2", StringComparison.OrdinalIgnoreCase) != -1
+                || iMesh.Path.IndexOf("LOD3", StringComparison.OrdinalIgnoreCase) != -1
+                || iMesh.Path.IndexOf("LOD4", StringComparison.OrdinalIgnoreCase) != -1
 
                 || iMesh.Path.IndexOf("shadow", StringComparison.OrdinalIgnoreCase) != -1)
                 return;
