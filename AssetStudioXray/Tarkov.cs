@@ -7,7 +7,7 @@ using System.Text.Json;
 namespace AssetStudioXray
 {
     // The game side: the bundle manifest (StreamingAssets\Windows\Windows.json: bundle key -> dependencies) and, when present,
-    // the SPT database (SPT_Data\Server\database: item templates with their prefab bundles, weapon presets with the default mods).
+    // the SPT database (SPT_Data\Server\database or SPT_Runtime\SPT_Data\database: item templates with their prefab bundles, weapon presets with the default mods).
     internal sealed class Tarkov
     {
         public sealed class Bundle
@@ -56,7 +56,8 @@ namespace AssetStudioXray
                     Bundles[p.Name] = new Bundle { Key = p.Name, Dependencies = deps };
                 }
             }
-            dbDir = Path.Combine(gameDir, "SPT_Data", "Server", "database");
+            // SPT 3.x: SPT_Data\Server\database; SPT 4.x (server on .NET): SPT_Runtime\SPT_Data\database
+            dbDir = new[] { Path.Combine(gameDir, "SPT_Runtime", "SPT_Data", "database"), Path.Combine(gameDir, "SPT_Data", "Server", "database") }.FirstOrDefault(d => File.Exists(Path.Combine(d, "templates", "items.json"))) ?? Path.Combine(gameDir, "SPT_Data", "Server", "database");
         }
 
         public string BundlePath(string key) => Path.Combine(BundleRoot, key.Replace('/', Path.DirectorySeparatorChar));
