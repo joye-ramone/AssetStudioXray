@@ -28,10 +28,15 @@ commands:
 options:
   --game <dir>       Tarkov install folder (default: environment TARKOV_DIR)
   --out <dir>        output root (default: environment XRAY_DUMP_DIR, else .\xray_dump)
-  --deps <mode>      none | content (default: dependencies under assets/content/ without audio and shared animation sets) | all
+  --deps <mode>      none | content (default: dependencies under assets/content/ without audio and shared animation sets, and the
+                     effect bundles under assets/systems/effects/: muzzle flash, smoke, heat haze materials) | all
   --filter <text>    export only root objects whose name contains the text (repeatable)
   --no-textures      skip the png export
   --no-audio         don't load the audio dependencies (sound banks) and skip the wav export
+  --shaders          load the game's `shaders` bundle (380 MB) and export the shaders of the exported materials: shaders\<name>.json
+                     (properties, passes, render state, constant buffers) and every D3D11 program as .dxbc + disassembled .asm
+  --shader-max <n>   with --shaders: write the programs of a shader only when it has at most n (default 256; 0 = all); bigger ones
+                     (surface shaders with every lighting variant, 16244 for the weapon shader) get the program list only
   --managed <dir>    game assemblies for MonoBehaviours without a type tree (default: <game>\EscapeFromTarkov_Data\Managed; read with
                      Mono.Cecil, nothing is run)
   --clean            delete the output folder first
@@ -49,6 +54,8 @@ options:
             public List<string> Filters = new List<string>();
             public bool Textures = true;
             public bool Audio = true;
+            public bool Shaders;
+            public int ShaderMax = 256;
             public string Managed;
             public bool Clean;
             public string Name;
@@ -114,6 +121,8 @@ options:
                     case "--filter": o.Filters.Add(Next()); break;
                     case "--no-textures": o.Textures = false; break;
                     case "--no-audio": o.Audio = false; break;
+                    case "--shaders": o.Shaders = true; break;
+                    case "--shader-max": o.ShaderMax = int.TryParse(Next(), out var sm) && sm >= 0 ? sm : throw new ArgumentException("--shader-max: a number >= 0"); break;
                     case "--managed": o.Managed = Next(); break;
                     case "--clean": o.Clean = true; break;
                     case "--name": o.Name = Next(); break;
@@ -212,7 +221,7 @@ options:
             }
 
             var skipped = new List<string>();
-            var load = tk.Resolve(own, o.Deps, o.Audio, skipped);
+            var load = tk.Resolve(own, o.Deps, o.Audio, o.Shaders, skipped);
             // own bundles and the dependencies in their folders (textures, client_assets with the model and clips) are the ones exported;
             // the other dependencies only resolve references (base controllers, shared clips, materials)
             var ownDirs = own.Select(k => k.Substring(0, k.LastIndexOf('/') + 1)).Distinct().ToList();
@@ -251,7 +260,7 @@ options:
                 assemblies.Load(managed);
             else
                 Logger.Warning($"no game assemblies in {managed}: MonoBehaviours without a type tree are skipped");
-            var stats = XrayExporter.Run(am, outDir, IsPrimary, KeyOf, o.Filters, o.Textures, o.Audio, assemblies);
+            var stats = XrayExporter.Run(am, outDir, IsPrimary, KeyOf, o.Filters, o.Textures, o.Audio, o.Shaders, o.ShaderMax, assemblies);
             info["stats"] = stats;
             System.IO.File.WriteAllText(Path.Combine(outDir, "manifest.json"), JsonSerializer.Serialize(info, new JsonSerializerOptions { WriteIndented = true, IncludeFields = true }), new UTF8Encoding(false));
             Console.WriteLine($"-> {Path.GetFullPath(outDir)}");
@@ -281,7 +290,7 @@ options:
                     continue;
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 var own = g.ToList();
-                var load = tk.Resolve(own, o.Deps, false, new List<string>());
+                var load = tk.Resolve(own, o.Deps, false, false, new List<string>());
                 if (!load.Contains(skeleton, StringComparer.OrdinalIgnoreCase))
                     load.Add(skeleton);
                 load = load.Where(k => System.IO.File.Exists(tk.BundlePath(k))).ToList();

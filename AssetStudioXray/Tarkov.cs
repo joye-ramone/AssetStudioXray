@@ -157,10 +157,12 @@ namespace AssetStudioXray
 
         // the bundles to load for a set of own bundles: dependencies followed recursively, filtered by the mode
         //   none     only the own bundles
-        //   content  + dependencies under assets/content/ except the shared weapon animation sets (hundreds of MB)
+        //   content  + dependencies under assets/content/ except the shared weapon animation sets (hundreds of MB), and the effect
+        //            bundles under assets/systems/effects/ (at most 2.5 MB: muzzle flash, smoke and heat haze materials of the weapons)
         //   all      + every dependency except shaders and cubemaps (no meshes or clips there)
         // audio: the audio dependencies too (the weapon's sound banks; XrayExporter writes the AudioClips an own object reaches)
-        public List<string> Resolve(IEnumerable<string> own, string mode, bool audio, List<string> skipped)
+        // shaders: the `shaders` bundle too, in every mode but none (XrayExporter writes the shaders of the exported materials)
+        public List<string> Resolve(IEnumerable<string> own, string mode, bool audio, bool shaders, List<string> skipped)
         {
             var result = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -182,7 +184,7 @@ namespace AssetStudioXray
                 {
                     if (!seen.Add(d))
                         continue;
-                    if (!Wanted(d, mode, audio))
+                    if (!Wanted(d, mode, audio, shaders))
                     {
                         skipped.Add(d);
                         continue;
@@ -194,18 +196,20 @@ namespace AssetStudioXray
             return result;
         }
 
-        private static bool Wanted(string key, string mode, bool audio)
+        private static bool Wanted(string key, string mode, bool audio, bool shaders)
         {
             if (mode == "none")
                 return false;
             var k = key.ToLowerInvariant();
             if (k.StartsWith("assets/content/audio/"))
                 return audio;
-            if (k == "shaders" || k == "cubemaps")
+            if (k == "shaders")
+                return shaders;
+            if (k == "cubemaps")
                 return false;
             if (mode == "all")
                 return true;
-            return k.StartsWith("assets/content/") && !k.StartsWith("assets/content/weapons/animations/");
+            return (k.StartsWith("assets/content/") && !k.StartsWith("assets/content/weapons/animations/")) || k.StartsWith("assets/systems/effects/");
         }
     }
 }

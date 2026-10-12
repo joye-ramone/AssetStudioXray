@@ -26,11 +26,16 @@ namespace AssetStudioXray
     //                                       the type tree or the game assemblies; a reference is {"ref": "<class>:<name>", "id": "<class>_<path id>"}
     //   physics.json                        own colliders, rigid bodies, joints and physic materials: type tree values, root and transform
     //                                       path of the game object (Tarkov: a BoxCollider per weapon part on its LOD1 node, used for loot)
+    //   materials.json                      own materials and those own renderers (particle systems too) or exported behaviours use (a muzzle
+    //                                       manager's jet material): shader, textures, floats, ints, colors, keywords, queue, used_by
+    //   shaders\<name>_<path id>.json       the shaders of those materials when loaded (--shaders): properties, keywords, passes with render
+    //                                       state, constant buffer layouts, programs; shaders\<name>_<path id>\*.dxbc + .asm up to --shader-max
+    //                                       programs per shader (ShaderExport.cs)
     //   audio\<name>.wav                    AudioClips the own objects reach (own bundles and the sound banks)
     //   text\<name>.bytes                   own TextAssets (raw)
     // Binary layout: every array is a little-endian block in the .bin of its json, referenced as {"offset", "count", "type"} (f32, i32, u32).
     // Matrices are row-major (row 0 first), Unity column-vector convention (p' = M p).
-    internal static class XrayExporter
+    internal static partial class XrayExporter
     {
         private static readonly JsonSerializerOptions jsonOptions = new JsonSerializerOptions { WriteIndented = true };
 
@@ -48,7 +53,7 @@ namespace AssetStudioXray
 
         private static void WriteJson(string path, object o) => File.WriteAllText(path, JsonSerializer.Serialize(o, jsonOptions), new UTF8Encoding(false));
 
-        public static object Run(AssetsManager assetsManager, string outDir, Func<SerializedFile, bool> isPrimary, Func<SerializedFile, string> bundleKey, List<string> filters, bool exportTextures, bool exportAudio, AssemblyLoader assemblies)
+        public static object Run(AssetsManager assetsManager, string outDir, Func<SerializedFile, bool> isPrimary, Func<SerializedFile, string> bundleKey, List<string> filters, bool exportTextures, bool exportAudio, bool exportShaders, int maxShaderPrograms, AssemblyLoader assemblies)
         {
             Directory.CreateDirectory(outDir);
             bool Match(string name) => filters.Count == 0 || filters.Any(f => name.IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0);
@@ -110,25 +115,6 @@ namespace AssetStudioXray
                     Logger.Error($"[xray] model {root.m_Name}: {ex}");
                 }
             }
-            if (exportTextures)
-            {
-                var texDir = Path.Combine(outDir, "textures");
-                foreach (var (tex, name) in textures)
-                {
-                    try
-                    {
-                        Directory.CreateDirectory(texDir);
-                        using var ms = tex.ConvertToStream(ImageFormat.Png, true);
-                        if (ms != null)
-                            File.WriteAllBytes(Path.Combine(texDir, name + ".png"), ms.ToArray());
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Error($"[xray] texture {name}: {ex.Message}");
-                    }
-                }
-            }
-
             // controllers: own ones and the base controllers of own override controllers; clips: own ones and every clip those controllers use
             var overrides = all.OfType<AnimatorOverrideController>().Where(Own).ToList();
             var ctrls = new HashSet<AnimatorController>(all.OfType<AnimatorController>().Where(Own));
@@ -173,6 +159,10 @@ namespace AssetStudioXray
             var queue = new Queue<MonoBehaviour>(all.OfType<MonoBehaviour>().Where(Own));
             var seenMb = new HashSet<MonoBehaviour>(queue);
             var audio = new HashSet<AudioClip>(all.OfType<AudioClip>().Where(Own));
+            var materialUse = new Dictionary<Material, List<string>>();
+            foreach (var m in all.OfType<Material>().Where(Own))
+                AddUse(materialUse, m, null);
+            CollectRendererMaterials(all.Where(Own), refs, materialUse);
             var behaviours = 0;
             while (queue.Count > 0 && behaviours < 20000)
             {
@@ -186,6 +176,8 @@ namespace AssetStudioXray
                     {
                         if (r is AudioClip ac)
                             audio.Add(ac);
+                        else if (r is Material mat)
+                            AddUse(materialUse, mat, "behaviour " + BehaviourId(mb));
                         else if (r is MonoBehaviour m && Follow(m) && seenMb.Add(m))
                             queue.Enqueue(m);
                     }
@@ -215,6 +207,25 @@ namespace AssetStudioXray
                     }
                 }
             }
+            var (materials, shaders) = ExportMaterials(materialUse, outDir, refs, bundleKey, textures, exportShaders, maxShaderPrograms);
+            if (exportTextures)
+            {
+                var texDir = Path.Combine(outDir, "textures");
+                foreach (var (tex, name) in textures)
+                {
+                    try
+                    {
+                        Directory.CreateDirectory(texDir);
+                        using var ms = tex.ConvertToStream(ImageFormat.Png, true);
+                        if (ms != null)
+                            File.WriteAllBytes(Path.Combine(texDir, name + ".png"), ms.ToArray());
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"[xray] texture {name}: {ex.Message}");
+                    }
+                }
+            }
             var colliders = ExportPhysics(all.Where(o => Own(o) && PhysicsClasses.Contains(o.type)).ToList(), Path.Combine(outDir, "physics.json"), refs);
             var texts = all.OfType<TextAsset>().Where(Own).ToList();
             foreach (var ta in texts)
@@ -222,8 +233,8 @@ namespace AssetStudioXray
                 Directory.CreateDirectory(Path.Combine(outDir, "text"));
                 File.WriteAllBytes(Path.Combine(outDir, "text", Safe(ta.m_Name) + ".bytes"), ta.m_Script);
             }
-            Logger.Info($"[xray] {modelNames.Count} models, {clips.Count} clips, {ctrls.Count} controllers, {overrides.Count} override controllers, {avatars.Count} avatars, {textures.Count} textures, {behaviours} behaviours, {colliders} physics components, {wavs} of {audio.Count} audio clips, {texts.Count} text assets -> {outDir}");
-            return new { models = modelNames.ToArray(), clips = clips.Count, controllers = ctrls.Count, overrides = overrides.Count, avatars = avatars.Count, textures = textures.Count, behaviours, physics = colliders, audio = wavs, objects = all.Count };
+            Logger.Info($"[xray] {modelNames.Count} models, {clips.Count} clips, {ctrls.Count} controllers, {overrides.Count} override controllers, {avatars.Count} avatars, {textures.Count} textures, {materials} materials, {shaders} shaders, {behaviours} behaviours, {colliders} physics components, {wavs} of {audio.Count} audio clips, {texts.Count} text assets -> {outDir}");
+            return new { models = modelNames.ToArray(), clips = clips.Count, controllers = ctrls.Count, overrides = overrides.Count, avatars = avatars.Count, textures = textures.Count, materials, shaders, behaviours, physics = colliders, audio = wavs, objects = all.Count };
         }
 
         private static readonly HashSet<ClassIDType> PhysicsClasses = new HashSet<ClassIDType> { ClassIDType.BoxCollider, ClassIDType.SphereCollider, ClassIDType.CapsuleCollider, ClassIDType.MeshCollider, ClassIDType.Rigidbody, ClassIDType.CharacterJoint, ClassIDType.FixedJoint, ClassIDType.HingeJoint, ClassIDType.ConfigurableJoint, ClassIDType.PhysicMaterial };
@@ -281,17 +292,30 @@ namespace AssetStudioXray
                 this.assemblies = assemblies;
             }
 
+            private SerializedFile File(SerializedFile from, int fileId)
+            {
+                if (fileId <= 0)
+                    return from;
+                return fileId - 1 < from.m_Externals.Count && files.TryGetValue(from.m_Externals[fileId - 1].fileName, out var f) ? f : null;
+            }
+
             public AssetStudio.Object Get(SerializedFile from, int fileId, long pathId)
             {
                 if (pathId == 0)
                     return null;
-                var f = from;
-                if (fileId > 0)
-                {
-                    if (fileId - 1 >= from.m_Externals.Count || !files.TryGetValue(from.m_Externals[fileId - 1].fileName, out f))
-                        return null;
-                }
-                return f.ObjectsDic.TryGetValue(pathId, out var o) ? o : null;
+                var f = File(from, fileId);
+                return f != null && f.ObjectsDic.TryGetValue(pathId, out var o) ? o : null;
+            }
+
+            // also objects AssetsManager does not keep (Shader from Unity 2021 on): a plain Object to read through its type tree
+            public AssetStudio.Object GetRaw(SerializedFile from, int fileId, long pathId)
+            {
+                var o = Get(from, fileId, pathId);
+                if (o != null || pathId == 0)
+                    return o;
+                var f = File(from, fileId);
+                var oi = f?.m_Objects.FirstOrDefault(x => x.m_PathID == pathId);
+                return oi == null ? null : new AssetStudio.Object(new ObjectReader(f.reader, f, oi));
             }
 
             public System.Collections.Specialized.OrderedDictionary Fields(MonoBehaviour mb)
@@ -535,13 +559,7 @@ namespace AssetStudioXray
                 {
                     if (te.Value.m_Texture.TryGet(out var tx) && tx is Texture2D t2)
                     {
-                        if (!textures.TryGetValue(t2, out var tn))
-                        {
-                            tn = Safe(t2.m_Name);
-                            if (textures.ContainsValue(tn))
-                                tn += "_" + t2.m_PathID;
-                            textures[t2] = tn;
-                        }
+                        var tn = TextureName(t2, textures);
                         texs[te.Key] = new { texture = tn, scale = new[] { te.Value.m_Scale.X, te.Value.m_Scale.Y }, offset = new[] { te.Value.m_Offset.X, te.Value.m_Offset.Y } };
                     }
                 }

@@ -6,7 +6,7 @@ of this repo; no FBX. Reads the game files only.
 
 ```
 dotnet build AssetStudioXray\AssetStudioXray.csproj -c Release
-AssetStudioXray <command> [arguments] [--game <Tarkov dir>] [--out <dir>] [--deps none|content|all] [--filter <text>] [--no-textures] [--no-audio] [--clean]
+AssetStudioXray <command> [arguments] [--game <Tarkov dir>] [--out <dir>] [--deps none|content|all] [--filter <text>] [--no-textures] [--no-audio] [--shaders [--shader-max N]] [--clean]
   list <text>                    bundles and item templates whose path / name contains the text
   weapon <name|id> [--preset P]  weapon prefab + the mods of its default preset (or preset P)  -> <out>\weapons\<name>
   hands <name>                   hands bundle(s) (folder or file name) + the player skeleton    -> <out>\hands\<name>
@@ -19,8 +19,16 @@ AssetStudioXray <command> [arguments] [--game <Tarkov dir>] [--out <dir>] [--dep
   and weapon presets (default mods per slot) from the SPT database (`SPT_Data\Server\database` or, SPT 4.x,
   `SPT_Runtime\SPT_Data\database`: `templates\items.json`, `globals.json`).
 - `--deps content` (default) loads the dependencies under `assets/content/` except audio and the shared generated animation sets
-  (`weapons/animations/*`: the `_simple` / `_spirit` clips, hundreds of MB); they resolve references (controllers using clips of other
+  (`weapons/animations/*`: the `_simple` / `_spirit` clips, hundreds of MB), and the small effect bundles under `assets/systems/effects/`
+  (muzzle flash, smoke, heat haze: the weapons' muzzle effect materials); they resolve references (controllers using clips of other
   weapons, materials).
+- Materials: `materials.json` lists the own materials and the ones own renderers (particle systems too) or exported behaviours use, with
+  shader, textures (written to `textures\`), floats, ints, colors, keywords, queue and their users.
+- `--shaders` also loads the game's `shaders` bundle (380 MB, about 2 s more) and writes the shaders of those materials:
+  `shaders\<name>_<path id>.json` (properties, keywords, passes with render state, constant buffer layouts, programs with their keywords)
+  and each D3D11 program as `.dxbc` plus its disassembly `.asm` (d3dcompiler_47.dll), headed by the constant buffer layout (`cb0[7].x
+  _ShotVals`). Unity 2021+ shaders are read through their type tree (AssetStudio does not parse them). A shader with more than
+  `--shader-max` programs (default 256, 0 = no limit) gets the list only: Tarkov's weapon surface shader has 16244 (214 MB).
 - `catalog`: one JSON per group (`assets/content/<a>/<b>`, usable items one level deeper) with the group's bundles, models (renderers,
   vertices, bones, materials, textures), textures, animator controllers (states per layer with their clips), override controllers,
   clips (length, loop, events, animated transforms by kind: arms, fingers, camera, IK, item; names resolved through the loaded
