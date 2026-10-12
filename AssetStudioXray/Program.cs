@@ -21,6 +21,9 @@ commands:
   hands <name>                   hands bundle(s) (folder or file name) + the player skeleton    -> <out>\hands\<name>
   item <name|id>                 item prefab                                                    -> <out>\items\<name>
   dump <bundle> [<bundle> ...]   bundles by manifest key or a unique part of it                 -> <out>\dump\<name>
+  catalog <prefix> [...]         a summary of every bundle group (assets/content/<a>/<b>) under assets/content/<prefix>:
+                                 models, textures, controllers, clips with their animated bones -> <out>\catalog\<group>.json
+                                 (existing group files are kept, so a run resumes; --clean redoes them)
 
 options:
   --game <dir>       Tarkov install folder (default: environment TARKOV_DIR)
@@ -32,6 +35,7 @@ options:
   --managed <dir>    game assemblies for MonoBehaviours without a type tree (default: <game>\EscapeFromTarkov_Data\Managed; read with
                      Mono.Cecil, nothing is run)
   --clean            delete the output folder first
+  --name <name>      dump: the output folder name (default: the first bundle's file name)
 ";
 
         private sealed class Options
@@ -47,6 +51,7 @@ options:
             public bool Audio = true;
             public string Managed;
             public bool Clean;
+            public string Name;
         }
 
         private sealed class ConsoleLogger : ILogger
@@ -111,6 +116,7 @@ options:
                     case "--no-audio": o.Audio = false; break;
                     case "--managed": o.Managed = Next(); break;
                     case "--clean": o.Clean = true; break;
+                    case "--name": o.Name = Next(); break;
                     default:
                         if (argv[i].StartsWith("--"))
                             throw new ArgumentException($"unknown option {argv[i]}");
@@ -120,7 +126,7 @@ options:
             }
             if (o.Deps is not ("none" or "content" or "all"))
                 throw new ArgumentException($"--deps {o.Deps}: none, content or all");
-            if (o.Command is not ("list" or "weapon" or "hands" or "item" or "dump"))
+            if (o.Command is not ("list" or "weapon" or "hands" or "item" or "dump" or "catalog"))
                 throw new ArgumentException($"unknown command {o.Command}");
             if (o.Args.Count == 0)
                 throw new ArgumentException($"{o.Command}: argument missing");
@@ -135,6 +141,8 @@ options:
             var query = string.Join(" ", o.Args);
             if (o.Command == "list")
                 return List(tk, query);
+            if (o.Command == "catalog")
+                return CatalogRun(tk, o);
 
             var own = new List<string>();
             var info = new Dictionary<string, object> { ["command"] = o.Command, ["query"] = query, ["game"] = o.Game, ["deps"] = o.Deps };
@@ -198,7 +206,7 @@ options:
                             return Ambiguous(a, m);
                         own.Add(m[0]);
                     }
-                    outName = Path.GetFileNameWithoutExtension(own[0].Substring(own[0].LastIndexOf('/') + 1));
+                    outName = o.Name ?? Path.GetFileNameWithoutExtension(own[0].Substring(own[0].LastIndexOf('/') + 1));
                     break;
                 }
             }
@@ -248,6 +256,56 @@ options:
             System.IO.File.WriteAllText(Path.Combine(outDir, "manifest.json"), JsonSerializer.Serialize(info, new JsonSerializerOptions { WriteIndented = true, IncludeFields = true }), new UTF8Encoding(false));
             Console.WriteLine($"-> {Path.GetFullPath(outDir)}");
             return 0;
+        }
+
+        // one AssetsManager per group: the group's bundles, their dependencies (--deps) and the player skeleton (arm bone names)
+        private static int CatalogRun(Tarkov tk, Options o)
+        {
+            const string skeleton = "assets/content/characters/character/skeleton.bundle";
+            // a group per item folder: assets/content/<a>/<b>; usable items (meds, food, tools) one level deeper
+            string GroupOf(string k)
+            {
+                var p = k.Split('/');
+                var depth = p.Length > 5 && p[3].Equals("usable_items", StringComparison.OrdinalIgnoreCase) ? 5 : 4;
+                return p.Length > depth ? string.Join("/", p.Take(depth)) : k;
+            }
+            var groups = tk.Bundles.Keys.Where(k => o.Args.Any(a => k.StartsWith("assets/content/" + a.Trim('/'), StringComparison.OrdinalIgnoreCase))).GroupBy(GroupOf, StringComparer.OrdinalIgnoreCase).OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase).ToList();
+            var dir = Path.Combine(o.Out, "catalog");
+            Directory.CreateDirectory(dir);
+            Console.WriteLine($"{groups.Count} groups -> {Path.GetFullPath(dir)}");
+            int done = 0, failed = 0;
+            foreach (var g in groups)
+            {
+                var file = Path.Combine(dir, Safe(g.Key.Substring("assets/content/".Length).Replace("/", "__")) + ".json");
+                if (!o.Clean && System.IO.File.Exists(file))
+                    continue;
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var own = g.ToList();
+                var load = tk.Resolve(own, o.Deps, false, new List<string>());
+                if (!load.Contains(skeleton, StringComparer.OrdinalIgnoreCase))
+                    load.Add(skeleton);
+                load = load.Where(k => System.IO.File.Exists(tk.BundlePath(k))).ToList();
+                var ownPaths = new HashSet<string>(own.Select(k => Path.GetFullPath(tk.BundlePath(k))), StringComparer.OrdinalIgnoreCase);
+                try
+                {
+                    var am = new AssetsManager();
+                    am.LoadFilesAndFolders(out _, load.Select(tk.BundlePath).ToList());
+                    var data = Catalog.Group(am, f => ownPaths.Contains(Path.GetFullPath(f.originalPath ?? f.fullName)));
+                    var bundles = own.Select(k => new { key = k, size = System.IO.File.Exists(tk.BundlePath(k)) ? new FileInfo(tk.BundlePath(k)).Length : -1 }).ToArray();
+                    Catalog.Write(file, new { group = g.Key, bundles, loaded = load.Count, seconds = Math.Round(sw.Elapsed.TotalSeconds, 1), data });
+                    am.Clear();
+                    done++;
+                    Console.WriteLine($"[catalog] {g.Key}: {own.Count} own + {load.Count - own.Count} loaded, {sw.Elapsed.TotalSeconds:F1} s");
+                }
+                catch (Exception e)
+                {
+                    failed++;
+                    Logger.Error($"[catalog] {g.Key}: {e}");
+                }
+                GC.Collect();
+            }
+            Console.WriteLine($"{done} groups written, {failed} failed, {groups.Count - done - failed} kept");
+            return failed > 0 ? 1 : 0;
         }
 
         private static int List(Tarkov tk, string text)
