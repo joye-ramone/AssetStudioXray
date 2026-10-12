@@ -1,43 +1,35 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFrameworks>net472;net8.0;net8.0-windows;net9.0;net9.0-windows</TargetFrameworks>
+        <TargetFramework>net8.0</TargetFramework>
         <Version>0.18.0.0</Version>
         <Copyright>Copyright © Perfare 2018-2022; Copyright © aelurum 2023-2024</Copyright>
         <DebugType>embedded</DebugType>
         <Platforms>AnyCPU;x64</Platforms>
     </PropertyGroup>
 
+    <!-- what AssetStudioXray uses: MonoBehaviour type trees from the game assemblies (Mono.Cecil), Texture2D -> png (texture decoder
+         package with its Windows native dll, ImageSharp), AudioClip -> wav (fmod) -->
     <ItemGroup>
         <PackageReference Include="Mono.Cecil" Version="0.11.6" />
-        <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    </ItemGroup>
-
-    <ItemGroup Condition=" !$(TargetFramework.Contains('windows')) ">
-        <PackageReference Include="Kyaru.Texture2DDecoder.Linux" Version="0.1.0" />
-        <PackageReference Include="Kyaru.Texture2DDecoder.macOS" Version="0.1.0" />
-    </ItemGroup>
-    
-    <ItemGroup Condition=" '$(TargetFramework)' != 'net472' ">
+        <PackageReference Include="Kyaru.Texture2DDecoder" Version="0.17.0" />
         <PackageReference Include="Kyaru.Texture2DDecoder.Windows" Version="0.1.0" />
-        <PackageReference Include="Kyaru.Texture2DDecoder">
-            <Version>0.17.0</Version>
-        </PackageReference>
-        <PackageReference Include="SixLabors.ImageSharp.Drawing" Version="2.1.4" />
+        <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
     </ItemGroup>
 
-    <ItemGroup Condition=" '$(TargetFramework)' == 'net472' ">
-        <PackageReference Include="SixLabors.ImageSharp.Drawing" Version="1.0.0-beta15" />
+    <!-- ImageSharp 3.1.x advisories fixed only in 4.1.2 (a major update): TIFF encode / decode, ICC profile parsing, histogram equalization.
+         Only PNG encoding of pixels decoded here is used (Texture2DExtensions), never one of those paths -->
+    <ItemGroup>
+        <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-j3p4-wp97-rph4" />
+        <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-j9gm-c75j-xc9q" />
+        <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-jjfr-hcj7-qf5w" />
+        <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-gwg2-r3hj-4w44" />
+        <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-wmxv-xphr-5c9g" />
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\AssetStudio.PInvoke\AssetStudio.PInvoke.csproj" />
-        <ProjectReference Include="..\AssetStudioFBXWrapper\AssetStudioFBXWrapper.csproj" />
         <ProjectReference Include="..\AssetStudio\AssetStudio.csproj" />
-    </ItemGroup>
-    
-    <ItemGroup Condition=" '$(TargetFramework)' == 'net472' ">
-        <ProjectReference Include="..\Texture2DDecoderWrapper\Texture2DDecoderWrapper.csproj" />
     </ItemGroup>
 
 </Project>

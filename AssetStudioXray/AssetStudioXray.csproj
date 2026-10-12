@@ -17,10 +17,9 @@
         <ProjectReference Include="..\AssetStudio\AssetStudio.csproj" />
     </ItemGroup>
 
-    <!-- native libraries: the texture decoder and fmod (AudioClip -> wav); no FBX, no ooz -->
-    <Target Name="CopyTextureDecoder" AfterTargets="AfterBuild">
-        <Copy SourceFiles="$(MSBuildThisFileDirectory)..\Texture2DDecoderNative\bin\x64\$(Configuration)\Texture2DDecoderNative.dll" DestinationFolder="$(TargetDir)runtimes\win-x64\native" ContinueOnError="false" />
-        <Copy SourceFiles="$(MSBuildThisFileDirectory)..\AssetStudioCLI\Libraries\win-x64\fmod.dll" DestinationFolder="$(TargetDir)runtimes\win-x64\native" ContinueOnError="false" />
-    </Target>
+    <!-- native libraries: fmod (AudioClip -> wav) from Libraries; the texture decoder comes with its NuGet package (AssetStudioUtility) -->
+    <ItemGroup>
+        <None Include="Libraries\win-x64\fmod.dll" Link="runtimes\win-x64\native\fmod.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
 
 </Project>

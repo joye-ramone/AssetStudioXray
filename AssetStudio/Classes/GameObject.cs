@@ -1,5 +1,3 @@
-﻿using System.Text.Json.Serialization;
-
 namespace AssetStudio
 {
     public sealed class GameObject : EditorExtension
@@ -13,8 +11,6 @@ namespace AssetStudio
         public SkinnedMeshRenderer m_SkinnedMeshRenderer;
         public Animator m_Animator;
         public Animation m_Animation;
-        [JsonIgnore]
-        public CubismModel CubismModel;
 
         public GameObject(ObjectReader reader) : base(reader)
         {

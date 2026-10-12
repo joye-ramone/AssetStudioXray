@@ -13,17 +13,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: microsoft/setup-msbuild@v2
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
 
-      # the only native library AssetStudioXray needs (AssetStudioFBXNative needs the Autodesk FBX SDK: not built here, so neither is AssetStudioModCLI)
-      - name: Texture2DDecoderNative
-        run: msbuild Texture2DDecoderNative\Texture2DDecoderNative.vcxproj /p:Configuration=Release /p:Platform=x64 /m /v:minimal
-
+      # managed only: the texture decoder's native dll comes with its NuGet package, fmod.dll from AssetStudioXray\Libraries
       - name: AssetStudioXray
-        run: dotnet build AssetStudioXray\AssetStudioXray.csproj -c Release "-p:SolutionDir=${{ github.workspace }}\\"
+        run: dotnet build AssetStudio.sln -c Release
 
       - uses: actions/upload-artifact@v4
         with:
