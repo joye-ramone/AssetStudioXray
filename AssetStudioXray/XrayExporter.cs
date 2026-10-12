@@ -24,6 +24,8 @@ namespace AssetStudioXray
     //   behaviours\<class>_<path id>.json   MonoBehaviours: the own ones (state machine behaviours with the game's animation events, sound
     //                                       players, prefab data) and those they reach in own or audio bundles (sound banks); fields from
     //                                       the type tree or the game assemblies; a reference is {"ref": "<class>:<name>", "id": "<class>_<path id>"}
+    //   physics.json                        own colliders, rigid bodies, joints and physic materials: type tree values, root and transform
+    //                                       path of the game object (Tarkov: a BoxCollider per weapon part on its LOD1 node, used for loot)
     //   audio\<name>.wav                    AudioClips the own objects reach (own bundles and the sound banks)
     //   text\<name>.bytes                   own TextAssets (raw)
     // Binary layout: every array is a little-endian block in the .bin of its json, referenced as {"offset", "count", "type"} (f32, i32, u32).
@@ -213,14 +215,56 @@ namespace AssetStudioXray
                     }
                 }
             }
+            var colliders = ExportPhysics(all.Where(o => Own(o) && PhysicsClasses.Contains(o.type)).ToList(), Path.Combine(outDir, "physics.json"), refs);
             var texts = all.OfType<TextAsset>().Where(Own).ToList();
             foreach (var ta in texts)
             {
                 Directory.CreateDirectory(Path.Combine(outDir, "text"));
                 File.WriteAllBytes(Path.Combine(outDir, "text", Safe(ta.m_Name) + ".bytes"), ta.m_Script);
             }
-            Logger.Info($"[xray] {modelNames.Count} models, {clips.Count} clips, {ctrls.Count} controllers, {overrides.Count} override controllers, {avatars.Count} avatars, {textures.Count} textures, {behaviours} behaviours, {wavs} of {audio.Count} audio clips, {texts.Count} text assets -> {outDir}");
-            return new { models = modelNames.ToArray(), clips = clips.Count, controllers = ctrls.Count, overrides = overrides.Count, avatars = avatars.Count, textures = textures.Count, behaviours, audio = wavs, objects = all.Count };
+            Logger.Info($"[xray] {modelNames.Count} models, {clips.Count} clips, {ctrls.Count} controllers, {overrides.Count} override controllers, {avatars.Count} avatars, {textures.Count} textures, {behaviours} behaviours, {colliders} physics components, {wavs} of {audio.Count} audio clips, {texts.Count} text assets -> {outDir}");
+            return new { models = modelNames.ToArray(), clips = clips.Count, controllers = ctrls.Count, overrides = overrides.Count, avatars = avatars.Count, textures = textures.Count, behaviours, physics = colliders, audio = wavs, objects = all.Count };
+        }
+
+        private static readonly HashSet<ClassIDType> PhysicsClasses = new HashSet<ClassIDType> { ClassIDType.BoxCollider, ClassIDType.SphereCollider, ClassIDType.CapsuleCollider, ClassIDType.MeshCollider, ClassIDType.Rigidbody, ClassIDType.CharacterJoint, ClassIDType.FixedJoint, ClassIDType.HingeJoint, ClassIDType.ConfigurableJoint, ClassIDType.PhysicMaterial };
+
+        // physics.json: colliders, rigid bodies, joints and physic materials of the own bundles as their type tree values, each with its game
+        // object's root and transform path (root name / child / ...: the node of models\<root>\model.json); [{class, id, root, path, fields}]
+        private static int ExportPhysics(List<AssetStudio.Object> objs, string path, RefResolver refs)
+        {
+            var list = new List<object>();
+            foreach (var o in objs)
+            {
+                try
+                {
+                    string root = null, tpath = null;
+                    var fields = o.ToType();
+                    // colliders are no parsed class here: their game object from the type tree
+                    var gref = fields?["m_GameObject"] as System.Collections.Specialized.OrderedDictionary;
+                    var go = gref == null ? null : refs.Get(o.assetsFile, Convert.ToInt32(gref["m_FileID"]), Convert.ToInt64(gref["m_PathID"])) as GameObject;
+                    if (go?.m_Transform != null)
+                    {
+                        var names = new List<string>();
+                        var t = go.m_Transform;
+                        while (t != null)
+                        {
+                            names.Add(t.m_GameObject.TryGet(out var g) ? g.m_Name : "?");
+                            t = t.m_Father.TryGet(out var f) ? f : null;
+                        }
+                        names.Reverse();
+                        root = names[0];
+                        tpath = string.Join("/", names);
+                    }
+                    list.Add(new { @class = o.type.ToString(), id = BehaviourId(o), name = NameOf(o), root, path = tpath, fields = fields == null ? null : Plain(fields, o.assetsFile, refs, null) });
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"[xray] physics {o.type} {o.m_PathID}: {ex.Message}");
+                }
+            }
+            if (list.Count > 0)
+                WriteJson(path, list);
+            return list.Count;
         }
 
         // PPtr -> object across the loaded files; type trees of MonoBehaviours (stored or built from the game assemblies)
