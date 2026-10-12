@@ -1,16 +1,11 @@
-# AssetStudioMod
+# AssetStudioXray
 
-[![Release](https://img.shields.io/github/v/release/aelurum/AssetStudio)](https://github.com/aelurum/AssetStudio/releases/latest) [![Downloads](https://img.shields.io/github/downloads/aelurum/AssetStudio/total?color=blue)](https://github.com/aelurum/AssetStudio/releases/latest) [![Download latest release](https://img.shields.io/badge/Download_latest_release-blue)](https://github.com/aelurum/AssetStudio/releases/latest)
+Command-line only fork of aelurum's [AssetStudioMod](https://github.com/aelurum/AssetStudio) (itself a modified version of Perfare's [AssetStudio](https://github.com/Perfare/AssetStudio)). The GUI is removed; the asset reading libraries and the upstream CLI are kept, plus a new console tool:
 
-[![Build status](https://ci.appveyor.com/api/projects/status/5qyai0hqs0ktyara/branch/AssetStudioMod?svg=true)](https://ci.appveyor.com/project/aelurum/assetstudiomod/branch/AssetStudioMod) [![Download latest build](https://img.shields.io/badge/Download_latest_build-brightgreen)](https://ci.appveyor.com/project/aelurum/assetstudiomod/branch/AssetStudioMod/artifacts)
+- **AssetStudioXray** (`AssetStudioXray/`): raw dumps of Unity models and animations for the X-Ray engine converters of the OGSR Engine: hierarchy with local transforms, meshes with skin weights and the true bind poses, materials and textures, Mecanim clips (streamed / dense / constant curves with their bindings and events), animator controllers and override controllers, MonoBehaviours with type trees, AudioClips as wav, as JSON + binary files. Built in catalog for Escape from Tarkov (bundle dependencies from the game manifest, item templates and weapon presets from an SPT server database): `weapon`, `hands`, `item`, `dump`, `list`. See [AssetStudioXray/README.md](AssetStudioXray/README.md).
+- **AssetStudioModCLI** (`AssetStudioCLI/`): the upstream CLI, unchanged except for the `splitObjects` LOD / shadow filters and the export folder structure (see the history).
 
-**AssetStudioMod** - modified version of Perfare's [AssetStudio](https://github.com/Perfare/AssetStudio), mainly focused on UI optimization and some functionality enhancements.
-
-**Neither the repository, nor the tool, nor the author of the tool, nor the author of the modification is affiliated with, sponsored, or authorized by Unity Technologies or its affiliates.**
-
-## Game specific modifications
-
-- [ArknightsStudio](https://github.com/aelurum/AssetStudio/tree/ArknightsStudio)
+**Neither the repository, nor the tool, nor the author of the tool, nor the author of the modification is affiliated with, sponsored, or authorized by Unity Technologies or its affiliates, or by the developers of any game whose files it reads.** The tools only read game files; use them on files you are allowed to use.
 
 ## AssetStudio Features
 
@@ -27,37 +22,45 @@
   - **MovieTexture**
   - **VideoClip**
   - **MonoBehaviour** : json
-  - **Animator** : export to FBX file with bound AnimationClip
- 
+  - **Animator** : export to FBX file with bound AnimationClip (FBX export: `splitObjects` mode of the CLI)
+
 ## AssetStudioMod Features
 
 - CLI version (for Windows, Linux, Mac)
-   - `Animator` and `AnimationClip` assets are not supported in the CLI version
+   - `Animator` and `AnimationClip` assets are not supported in the CLI version (AssetStudioXray dumps them raw)
 - Support of sprites with alpha mask
 - Support of image export in WebP format
 - Support of Live2D Cubism model export
-   - Ported from my fork of Perfare's [UnityLive2DExtractor](https://github.com/aelurum/UnityLive2DExtractor)
-   - Using the Live2D export in AssetStudio allows you to specify a Unity version and assembly folder if needed
+   - Ported from aelurum's fork of Perfare's [UnityLive2DExtractor](https://github.com/aelurum/UnityLive2DExtractor)
 - Support of swizzled Switch textures
     - Ported from nesrak1's [AssetStudio fork](https://github.com/nesrak1/AssetStudio/tree/switch-tex-deswizzle)
 - Detecting bundles with UnityCN encryption
    - Detection only. If you want to open them, please use Razmoth's [Studio](https://github.com/RazTools/Studio)
-- Some UI optimizations and bug fixes (See [CHANGELOG](https://github.com/aelurum/AssetStudio/blob/AssetStudioMod/CHANGELOG.md) for details)
+- Bug fixes (See [CHANGELOG](CHANGELOG.md) for details)
 
 ## Requirements
 
-- AssetStudioMod.net472
-   - GUI/CLI - [.NET Framework 4.7.2](https://dotnet.microsoft.com/download/dotnet-framework/net472)
-- AssetStudioMod.net6
-   - GUI/CLI (Windows) - [.NET Desktop Runtime 6.0](https://dotnet.microsoft.com/download/dotnet/6.0)
-   - CLI (Linux/Mac) - [.NET Runtime 6.0](https://dotnet.microsoft.com/download/dotnet/6.0)
-- AssetStudioMod.net8
-   - GUI/CLI (Windows) - [.NET Desktop Runtime 8.0](https://dotnet.microsoft.com/download/dotnet/8.0)
-   - CLI (Linux/Mac) - [.NET Runtime 8.0](https://dotnet.microsoft.com/download/dotnet/8.0)
+- AssetStudioXray: Windows x64, [.NET Runtime 8.0](https://dotnet.microsoft.com/download/dotnet/8.0)
+- AssetStudioModCLI
+   - net472: [.NET Framework 4.7.2](https://dotnet.microsoft.com/download/dotnet-framework/net472)
+   - net8 / net9: [.NET Runtime 8.0 / 9.0](https://dotnet.microsoft.com/download/dotnet/8.0) (Windows, Linux, Mac)
+
+## AssetStudioXray Usage
+
+```
+AssetStudioXray <command> [arguments] [--game <Tarkov dir>] [--out <dir>] [--deps none|content|all] [--filter <text>] [--no-textures] [--clean]
+  list <text>                    bundles and item templates whose path / name contains the text
+  weapon <name|id> [--preset P]  weapon prefab + the mods of its default preset (or preset P)  -> <out>\weapons\<name>
+  hands <name>                   hands bundle(s) (folder or file name) + the player skeleton    -> <out>\hands\<name>
+  item <name|id>                 item prefab                                                    -> <out>\items\<name>
+  dump <bundle> [<bundle> ...]   bundles by manifest key or a unique part of it                 -> <out>\dump\<name>
+```
+
+`--game` / `--out` default to the environment variables `TARKOV_DIR` / `XRAY_DUMP_DIR`. The output format is described in the header of `AssetStudioXray/XrayExporter.cs`.
 
 ## CLI Usage
 
-You can read CLI readme [here](https://github.com/aelurum/AssetStudio/blob/AssetStudioMod/AssetStudioCLI/ReadMe.md).
+You can read the CLI readme [here](AssetStudioCLI/ReadMe.md).
 
 ### Run
 
@@ -99,7 +102,7 @@ AssetStudioModCLI <asset folder path> -m live2d
 ```
 > When running in live2d mode you can only specify `-o`, `--log-level`, `--log-output`, `--l2d-motion-mode`, `--l2d-force-bezier`, `--export-asset-list`, `--unity-version` and `--assembly-folder` options.
 Any other options will be ignored.
-- Export all FBX objects (similar to "Export all objects (split)" option in the GUI)
+- Export all FBX objects (every model with its own FBX file)
 ```
 AssetStudioModCLI <asset folder path> -m splitObjects
 ```
@@ -146,7 +149,7 @@ AssetStudioModCLI <asset folder path> -t monobehaviour --assembly-folder <assemb
 ```
 AssetStudioModCLI <asset folder path> --unity-version 2017.4.39f1
 ```
-- Load assets of all types and show them (similar to "Display all assets" option in the GUI)
+- Load assets of all types and show them
 ```
 AssetStudioModCLI <asset folder path> -m info --load-all
 ```
@@ -155,46 +158,16 @@ AssetStudioModCLI <asset folder path> -m info --load-all
 AssetStudioModCLI <asset folder path> -m dump -t material --load-all
 ```
 
-## GUI Usage
+### MonoBehaviour and Il2Cpp
 
-### Load Assets/AssetBundles
-
-Use **File->Load file** or **File->Load folder**.
-
-When AssetStudio loads AssetBundles, it decompresses and reads it directly in memory, which may cause a large amount of memory to be used. You can use **File->Extract file** or **File->Extract folder** to extract AssetBundles to another folder, and then read.
-
-### Extract/Decompress AssetBundles
-
-Use **File->Extract file** or **File->Extract folder**.
-
-### Export Assets, Live2D models
-
-Use **Export** menu.
-
-### Export Model
-
-Export model from "Scene Hierarchy" using the **Model** menu.
-
-Export Animator from "Asset List" using the **Export** menu.
-
-#### With AnimationClip
-
-Select model from "Scene Hierarchy" then select the AnimationClip from "Asset List", using **Model->Export selected objects with AnimationClip** to export.
-
-Export Animator will export bound AnimationClip or use **Ctrl** to select Animator and AnimationClip from "Asset List", using **Export->Export Animator with selected AnimationClip** to export.
-
-### Export MonoBehaviour
-
-When you select an asset of the MonoBehaviour type for the first time, AssetStudio will ask you the directory where the assembly is located, please select the directory where the assembly is located, such as the `Managed` folder.
-
-#### For Il2Cpp
-
-First, use [Il2CppDumper](https://github.com/Perfare/Il2CppDumper) to generate dummy dll, then when using AssetStudio to select the assembly directory, select the dummy dll folder.
+MonoBehaviour assets need the game's assemblies (`--assembly-folder`, such as the `Managed` folder). For Il2Cpp games, first use [Il2CppDumper](https://github.com/Perfare/Il2CppDumper) to generate dummy dlls, then pass the dummy dll folder.
 
 ## Build
 
-* Visual Studio 2022 or newer
-* **AssetStudioFBXNative** uses [FBX SDK 2020.2.1](https://www.autodesk.com/developer-network/platform-technologies/fbx-sdk-2020-2-1), before building, you need to install the FBX SDK and modify the project file, change include directory and library directory to point to the FBX SDK directory
+- Visual Studio 2022 or newer (C++ and .NET desktop workloads), .NET 8 SDK (.NET 9 SDK for the net9 CLI)
+- Native libraries first (x64 Release): `Texture2DDecoderNative` (needed by both tools), `AssetStudioFBXNative` (only for the CLI's FBX export; needs the [FBX SDK](https://aps.autodesk.com/developer/overview/fbx-sdk) 2020.3.7, installed to `C:\Program Files\Autodesk\FBX\FBX SDK\2020.3.7`)
+- `dotnet build AssetStudioXray\AssetStudioXray.csproj -c Release -p:SolutionDir=<repo>\`
+- `dotnet build AssetStudioCLI\AssetStudioCLI.csproj -c Release -f net8.0 -p:SolutionDir=<repo>\`
 
 ## Open source libraries used
 
