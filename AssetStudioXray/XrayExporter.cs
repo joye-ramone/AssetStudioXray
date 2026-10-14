@@ -829,6 +829,21 @@ namespace AssetStudioXray
                     // leaf nodes: m_ClipID indexes m_AnimationClips (m_ClipIndex is the pre-4.5 field, 0 here)
                     clips = st.m_BlendTreeConstantArray.SelectMany(bt => bt.m_NodeArray).Where(n => n.m_ClipID != uint.MaxValue && n.m_ChildIndices.Length == 0).Select(n => n.m_ClipID < clips.Length ? clips[n.m_ClipID] : $"#{n.m_ClipID}").ToArray(),
                     blend = st.m_BlendTreeConstantArray.SelectMany(bt => bt.m_NodeArray).Where(n => n.m_ChildIndices.Length > 0).Select(n => new { type = n.m_BlendType, param = Str(n.m_BlendEventID), param_y = Str(n.m_BlendEventYID), thresholds = n.m_ChildThresholdArray }).ToArray(),
+                    // the whole blend trees: node 0 is the root; 1D thresholds and 2D positions live in m_Blend1dData / m_Blend2dData since
+                    // Unity 4.1 (m_ChildThresholdArray above is the pre-4.1 field, null here)
+                    trees = st.m_BlendTreeConstantArray.Select(bt => bt.m_NodeArray.Select((n, ni) => new
+                    {
+                        index = ni,
+                        type = n.m_BlendType,
+                        param = n.m_ChildIndices.Length > 0 ? Str(n.m_BlendEventID) : null,
+                        param_y = n.m_ChildIndices.Length > 0 && n.m_BlendType >= 1 && n.m_BlendType <= 3 ? Str(n.m_BlendEventYID) : null,
+                        children = n.m_ChildIndices,
+                        thresholds = n.m_ChildIndices.Length > 0 && n.m_BlendType == 0 ? n.m_Blend1dData?.m_ChildThresholdArray : null,
+                        positions = n.m_ChildIndices.Length > 0 && n.m_BlendType >= 1 && n.m_BlendType <= 3 ? n.m_Blend2dData?.m_ChildPositionArray?.Select(p => new[] { p.X, p.Y }).ToArray() : null,
+                        direct = n.m_ChildIndices.Length > 0 && n.m_BlendType == 4 ? n.m_BlendDirectData?.m_ChildBlendEventIDArray?.Select(Str).ToArray() : null,
+                        clip = n.m_ChildIndices.Length == 0 && n.m_ClipID != uint.MaxValue ? (n.m_ClipID < clips.Length ? clips[n.m_ClipID] : $"#{n.m_ClipID}") : null,
+                        mirror = n.m_Mirror,
+                    }).ToArray()).ToArray(),
                     transitions = st.m_TransitionConstantArray.Select(tr => new
                     {
                         to = tr.m_DestinationState,
