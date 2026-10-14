@@ -251,7 +251,7 @@ namespace AssetStudioXray
                     try
                     {
                         Directory.CreateDirectory(texDir);
-                        using var ms = tex.ConvertToStream(ImageFormat.Png, true);
+                        using var ms = tex.ConvertToPng(true);
                         if (ms != null)
                             File.WriteAllBytes(Path.Combine(texDir, name + ".png"), ms.ToArray());
                     }
@@ -588,7 +588,6 @@ namespace AssetStudioXray
                     materials.Add(null);
                     continue;
                 }
-                mat.m_Shader.TryGet(out var shader);
                 var texs = new Dictionary<string, object>();
                 foreach (var te in mat.m_SavedProperties.m_TexEnvs)
                 {
@@ -601,7 +600,6 @@ namespace AssetStudioXray
                 materials.Add(new
                 {
                     name = mat.m_Name,
-                    shader = shader?.m_ParsedForm?.m_Name ?? shader?.m_Name,
                     textures = texs,
                     floats = mat.m_SavedProperties.m_Floats?.ToDictionary(x => x.Key, x => x.Value),
                     colors = mat.m_SavedProperties.m_Colors?.ToDictionary(x => x.Key, x => new[] { x.Value.R, x.Value.G, x.Value.B, x.Value.A }),

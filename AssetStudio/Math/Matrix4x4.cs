@@ -144,18 +144,6 @@ namespace AssetStudio
             }
         }
 
-        public Vector4 GetRow(int index)
-        {
-            switch (index)
-            {
-                case 0: return new Vector4(M00, M01, M02, M03);
-                case 1: return new Vector4(M10, M11, M12, M13);
-                case 2: return new Vector4(M20, M21, M22, M23);
-                case 3: return new Vector4(M30, M31, M32, M33);
-                default: throw new IndexOutOfRangeException("Invalid row index!");
-            }
-        }
-
         public static Matrix4x4 operator *(Matrix4x4 lhs, Matrix4x4 rhs)
         {
             Matrix4x4 res;
@@ -195,47 +183,5 @@ namespace AssetStudio
             return !(lhs == rhs);
         }
 
-        public static Matrix4x4 Scale(Vector3 vector)
-        {
-            Matrix4x4 m;
-            m.M00 = vector.X; m.M01 = 0F; m.M02 = 0F; m.M03 = 0F;
-            m.M10 = 0F; m.M11 = vector.Y; m.M12 = 0F; m.M13 = 0F;
-            m.M20 = 0F; m.M21 = 0F; m.M22 = vector.Z; m.M23 = 0F;
-            m.M30 = 0F; m.M31 = 0F; m.M32 = 0F; m.M33 = 1F;
-            return m;
-        }
-
-        public static Matrix4x4 Translate(Vector3 vector)
-        {
-            Matrix4x4 m;
-            m.M00 = 1F; m.M01 = 0F; m.M02 = 0F; m.M03 = vector.X;
-            m.M10 = 0F; m.M11 = 1F; m.M12 = 0F; m.M13 = vector.Y;
-            m.M20 = 0F; m.M21 = 0F; m.M22 = 1F; m.M23 = vector.Z;
-            m.M30 = 0F; m.M31 = 0F; m.M32 = 0F; m.M33 = 1F;
-            return m;
-        }
-
-        public static Matrix4x4 Rotate(Quaternion q)
-        {
-            float x = q.X * 2.0F;
-            float y = q.Y * 2.0F;
-            float z = q.Z * 2.0F;
-            float xx = q.X * x;
-            float yy = q.Y * y;
-            float zz = q.Z * z;
-            float xy = q.X * y;
-            float xz = q.X * z;
-            float yz = q.Y * z;
-            float wx = q.W * x;
-            float wy = q.W * y;
-            float wz = q.W * z;
-
-            Matrix4x4 m;
-            m.M00 = 1.0f - (yy + zz); m.M10 = xy + wz; m.M20 = xz - wy; m.M30 = 0.0F;
-            m.M01 = xy - wz; m.M11 = 1.0f - (xx + zz); m.M21 = yz + wx; m.M31 = 0.0F;
-            m.M02 = xz + wy; m.M12 = yz - wx; m.M22 = 1.0f - (xx + yy); m.M32 = 0.0F;
-            m.M03 = 0.0F; m.M13 = 0.0F; m.M23 = 0.0F; m.M33 = 1.0F;
-            return m;
-        }
     }
 }

@@ -304,9 +304,5 @@ namespace AssetStudio
             //HumanDescription m_HumanDescription 2019 and up
         }
 
-        public string FindBonePath(uint hash)
-        {
-            return m_TOS.FirstOrDefault(pair => pair.Key == hash).Value;
-        }
     }
 }

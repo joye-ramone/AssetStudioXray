@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -11,7 +11,7 @@ namespace AssetStudio
 
         protected NamedObject() { }
 
-        protected NamedObject(ObjectReader reader) : base(reader)
+        public NamedObject(ObjectReader reader) : base(reader)
         {
             m_Name = reader.ReadAlignedString();
         }

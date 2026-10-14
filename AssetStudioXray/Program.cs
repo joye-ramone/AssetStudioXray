@@ -253,7 +253,7 @@ options:
             Console.WriteLine($"{own.Count} own bundles, {load.Count} to load ({primary.Count} exported), {skipped.Count} dependencies skipped (--deps {o.Deps})");
 
             var am = new AssetsManager();
-            am.LoadFilesAndFolders(out _, load.Select(tk.BundlePath).ToList());
+            am.LoadFiles(load.Select(tk.BundlePath));
             if (am.assetsFileList.Count == 0)
             {
                 Console.Error.WriteLine("error: nothing loaded");
@@ -319,7 +319,7 @@ options:
                 try
                 {
                     var am = new AssetsManager();
-                    am.LoadFilesAndFolders(out _, load.Select(tk.BundlePath).ToList());
+                    am.LoadFiles(load.Select(tk.BundlePath));
                     var data = Catalog.Group(am, f => ownPaths.Contains(Path.GetFullPath(f.originalPath ?? f.fullName)));
                     var bundles = own.Select(k => new { key = k, size = System.IO.File.Exists(tk.BundlePath(k)) ? new FileInfo(tk.BundlePath(k)).Length : -1 }).ToArray();
                     Catalog.Write(file, new { group = g.Key, bundles, loaded = load.Count, seconds = Math.Round(sw.Elapsed.TotalSeconds, 1), data });

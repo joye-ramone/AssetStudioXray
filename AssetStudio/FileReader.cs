@@ -9,10 +9,6 @@ namespace AssetStudio
         public string FileName;
         public FileType FileType;
 
-        private static readonly byte[] gzipMagic = { 0x1f, 0x8b };
-        private static readonly byte[] brotliMagic = { 0x62, 0x72, 0x6F, 0x74, 0x6C, 0x69 };
-        private static readonly byte[] zipMagic = { 0x50, 0x4B, 0x03, 0x04 };
-        private static readonly byte[] zipSpannedMagic = { 0x50, 0x4B, 0x07, 0x08 };
         private static readonly byte[] unityFsMagic = {0x55, 0x6E, 0x69, 0x74, 0x79, 0x46, 0x53};
         private static readonly int headerBuffLen = 1152;
         private static byte[] headerBuff = new byte[headerBuffLen];
@@ -30,57 +26,25 @@ namespace AssetStudio
         {
             var buff = headerBuff.AsSpan();
             buff.Clear();
-            var dataLen = Read(headerBuff, 0, headerBuffLen);
+            _ = Read(headerBuff, 0, headerBuffLen);
             Position = 0;
 
             var signature = buff.ReadStringToNull(20);
-            switch (signature)
+            if (signature == "UnityFS")
             {
-                case "UnityWeb":
-                case "UnityRaw":
-                case "UnityArchive":
-                case "UnityFS":
-                    CheckBundleDataOffset(buff);
-                    return FileType.BundleFile;
-                case "UnityWebData1.0":
-                    return FileType.WebFile;
-                case "TuanjieWebData1.0":
-                    return FileType.WebFile;
-                default:
-                {
-                    var magic = Span<byte>.Empty;
-
-                    magic = dataLen > 2 ? buff.Slice(0, 2) : magic;
-                    if (magic.SequenceEqual(gzipMagic))
-                    {
-                        return FileType.GZipFile;
-                    }
-
-                    magic = dataLen > 38 ? buff.Slice(32, 6) : magic;
-                    if (magic.SequenceEqual(brotliMagic))
-                    {
-                        return FileType.BrotliFile;
-                    }
-
-                    if (IsSerializedFile(buff))
-                    {
-                        return FileType.AssetsFile;
-                    }
-
-                    magic = dataLen > 4 ? buff.Slice(0, 4): magic;
-                    if (magic.SequenceEqual(zipMagic) || magic.SequenceEqual(zipSpannedMagic))
-                    {
-                        return FileType.ZipFile;
-                    }
-
-                    if (CheckBundleDataOffset(buff))
-                    {
-                        return FileType.BundleFile;
-                    }
-
-                    return FileType.ResourceFile;
-                }
+                CheckBundleDataOffset(buff);
+                return FileType.BundleFile;
             }
+            if (IsSerializedFile(buff))
+            {
+                return FileType.AssetsFile;
+            }
+            // a bundle after some leading data
+            if (CheckBundleDataOffset(buff))
+            {
+                return FileType.BundleFile;
+            }
+            return FileType.ResourceFile;
         }
 
         private bool IsSerializedFile(Span<byte> buff)

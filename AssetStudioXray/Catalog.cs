@@ -100,7 +100,6 @@ namespace AssetStudioXray
             var materials = r.m_Materials.Select(mp => mp.TryGet(out var mat) ? new
             {
                 name = mat.m_Name,
-                shader = mat.m_Shader.TryGet(out var sh) ? sh.m_ParsedForm?.m_Name ?? sh.m_Name : null,
                 textures = mat.m_SavedProperties.m_TexEnvs.Where(te => te.Value.m_Texture.TryGet(out _)).ToDictionary(te => te.Key, te => te.Value.m_Texture.TryGet(out var tx) ? tx.m_Name : null),
             } : null).ToArray();
             return new

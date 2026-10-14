@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
@@ -15,21 +15,10 @@ namespace AssetStudio
             var spanBuff = buff.AsSpan(0, converter.OutputDataSize);
             try
             {
-                if (!converter.DecodeTexture2D(buff)) 
+                if (!converter.DecodeTexture2D(buff))
                     return null;
 
-                Image<Bgra32> image;
-                if (converter.UsesSwitchSwizzle)
-                {
-                    var uncroppedSize = converter.GetUncroppedSize();
-                    image = Image.LoadPixelData<Bgra32>(spanBuff, uncroppedSize.Width, uncroppedSize.Height);
-                    image.Mutate(x => x.Crop(m_Texture2D.m_Width, m_Texture2D.m_Height));
-                }
-                else
-                {
-                    image = Image.LoadPixelData<Bgra32>(spanBuff, m_Texture2D.m_Width, m_Texture2D.m_Height);
-                }
-
+                var image = Image.LoadPixelData<Bgra32>(spanBuff, m_Texture2D.m_Width, m_Texture2D.m_Height);
                 if (flip)
                 {
                     image.Mutate(x => x.Flip(FlipMode.Vertical));
@@ -42,17 +31,15 @@ namespace AssetStudio
             }
         }
 
-        public static MemoryStream ConvertToStream(this Texture2D m_Texture2D, ImageFormat imageFormat, bool flip)
+        // the texture as a PNG, null when it cannot be decoded
+        public static MemoryStream ConvertToPng(this Texture2D m_Texture2D, bool flip)
         {
-            var image = ConvertToImage(m_Texture2D, flip);
-            if (image != null)
-            {
-                using (image)
-                {
-                    return image.ConvertToStream(imageFormat);
-                }
-            }
-            return null;
+            using var image = ConvertToImage(m_Texture2D, flip);
+            if (image == null)
+                return null;
+            var stream = new MemoryStream();
+            image.SaveAsPng(stream);
+            return stream;
         }
     }
 }

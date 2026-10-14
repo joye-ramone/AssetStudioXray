@@ -118,21 +118,6 @@ namespace AssetStudio
         /// <param name="half2">A System.Half (the subtrahend).</param>
         /// <returns>The System.Half result of subtracting half2 from half1.</returns>
         public static Half Subtract(Half half1, Half half2) { return half1 - half2; }
-        /// <summary>
-        /// Multiplies two specified System.Half values.
-        /// </summary>
-        /// <param name="half1">A System.Half (the multiplicand).</param>
-        /// <param name="half2">A System.Half (the multiplier).</param>
-        /// <returns>A System.Half that is the result of multiplying half1 and half2.</returns>
-        public static Half Multiply(Half half1, Half half2) { return half1 * half2; }
-        /// <summary>
-        /// Divides two specified System.Half values.
-        /// </summary>
-        /// <param name="half1">A System.Half (the dividend).</param>
-        /// <param name="half2">A System.Half (the divisor).</param>
-        /// <returns>The System.Half that is the result of dividing half1 by half2.</returns>
-        /// <exception cref="System.DivideByZeroException">half2 is zero.</exception>
-        public static Half Divide(Half half1, Half half2) { return half1 / half2; }
 
         /// <summary>
         /// Returns the value of the System.Half operand (the sign of the operand is unchanged).
@@ -500,15 +485,6 @@ namespace AssetStudio
             return BitConverter.GetBytes(value.value);
         }
         /// <summary>
-        /// Converts the value of a specified instance of System.Half to its equivalent binary representation.
-        /// </summary>
-        /// <param name="value">A System.Half value.</param>
-        /// <returns>A 16-bit unsigned integer that contain the binary representation of value.</returns>        
-        public static ushort GetBits(Half value)
-        {
-            return value.value;
-        }
-        /// <summary>
         /// Returns a half-precision floating point number converted from two bytes
         /// at a specified position in a byte array.
         /// </summary>
@@ -535,35 +511,6 @@ namespace AssetStudio
             return new Half { value = bits };
         }
 
-        /// <summary>
-        /// Returns a value indicating the sign of a half-precision floating-point number.
-        /// </summary>
-        /// <param name="value">A signed number.</param>
-        /// <returns>
-        /// A number indicating the sign of value. Number Description -1 value is less
-        /// than zero. 0 value is equal to zero. 1 value is greater than zero.
-        /// </returns>
-        /// <exception cref="System.ArithmeticException">value is equal to System.Half.NaN.</exception>
-        public static int Sign(Half value)
-        {
-            if (value < 0)
-            {
-                return -1;
-            }
-            else if (value > 0)
-            {
-                return 1;
-            }
-            else
-            {
-                if (value != 0)
-                {
-                    throw new ArithmeticException("Function does not accept floating point Not-a-Number values.");
-                }
-            }
-
-            return 0;
-        }
         /// <summary>
         /// Returns the absolute value of a half-precision floating-point number.
         /// </summary>

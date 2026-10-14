@@ -96,14 +96,5 @@ namespace AssetStudio
             return dataLen;
         }
 
-        public void WriteData(string path)
-        {
-            var binaryReader = GetReader();
-            binaryReader.BaseStream.Position = Offset;
-            using (var writer = File.OpenWrite(path))
-            {
-                binaryReader.BaseStream.CopyTo(writer, size);
-            }
-        }
     }
 }

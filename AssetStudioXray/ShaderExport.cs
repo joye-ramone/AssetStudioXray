@@ -105,7 +105,7 @@ namespace AssetStudioXray
             {
                 try
                 {
-                    // shader: a parsed object before Unity 2021, else only the raw object (read through its type tree)
+                    // shader: the raw object, read through its type tree (AssetsManager does not keep shaders)
                     var sp = mat.m_Shader;
                     var shObj = refs.GetRaw(mat.assetsFile, sp.m_FileID, sp.m_PathID);
                     object shader = null;
@@ -173,8 +173,6 @@ namespace AssetStudioXray
 
         private static string ShaderName(AssetStudio.Object sh)
         {
-            if (sh is Shader s && s.m_ParsedForm != null)
-                return s.m_ParsedForm.m_Name;
             var t = sh.ToType();
             return t?["m_ParsedForm"] is OrderedDictionary pf ? pf["m_Name"] as string : (sh as NamedObject)?.m_Name;
         }
@@ -477,5 +475,43 @@ namespace AssetStudioXray
                 return null;
             }
         }
+    }
+
+    // Unity's ShaderGpuProgramType (the names in gpu_program_type)
+    internal enum ShaderGpuProgramType
+    {
+        Unknown = 0,
+        GLLegacy = 1,
+        GLES31AEP = 2,
+        GLES31 = 3,
+        GLES3 = 4,
+        GLES = 5,
+        GLCore32 = 6,
+        GLCore41 = 7,
+        GLCore43 = 8,
+        DX9VertexSM20 = 9,
+        DX9VertexSM30 = 10,
+        DX9PixelSM20 = 11,
+        DX9PixelSM30 = 12,
+        DX10Level9Vertex = 13,
+        DX10Level9Pixel = 14,
+        DX11VertexSM40 = 15,
+        DX11VertexSM50 = 16,
+        DX11PixelSM40 = 17,
+        DX11PixelSM50 = 18,
+        DX11GeometrySM40 = 19,
+        DX11GeometrySM50 = 20,
+        DX11HullSM50 = 21,
+        DX11DomainSM50 = 22,
+        MetalVS = 23,
+        MetalFS = 24,
+        SPIRV = 25,
+        ConsoleVS = 26,
+        ConsoleFS = 27,
+        ConsoleHS = 28,
+        ConsoleDS = 29,
+        ConsoleGS = 30,
+        RayTracing = 31,
+        PS5NGGC = 32
     }
 }

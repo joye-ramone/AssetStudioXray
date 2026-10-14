@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Text.Json;
 
 namespace AssetStudio
@@ -67,7 +67,7 @@ namespace AssetStudio
 
     public sealed class Material : NamedObject
     {
-        public PPtr<Shader> m_Shader;
+        public PPtr<Object> m_Shader;   // read through its type tree when needed (Unity 2021+ shaders are not parsed)
         public UnityPropertySheet m_SavedProperties;
 
         public Material() { }
@@ -81,7 +81,7 @@ namespace AssetStudio
 
         public Material(ObjectReader reader) : base(reader)
         {
-            m_Shader = new PPtr<Shader>(reader);
+            m_Shader = new PPtr<Object>(reader);
 
             if (version == 4 && version.Minor >= 1) //4.1 - 4.7.2
             {

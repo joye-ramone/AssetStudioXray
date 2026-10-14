@@ -127,11 +127,6 @@ namespace AssetStudio
             return reader.ReadBytes(reader.ReadInt32());
         }
 
-        public static ushort[] ReadUInt16Array(this BinaryReader reader)
-        {
-            return ReadArray(reader.ReadUInt16, reader.ReadInt32());
-        }
-
         public static int[] ReadInt32Array(this BinaryReader reader)
         {
             return ReadArray(reader.ReadInt32, reader.ReadInt32());
@@ -145,11 +140,6 @@ namespace AssetStudio
         public static uint[] ReadUInt32Array(this BinaryReader reader)
         {
             return ReadArray(reader.ReadUInt32, reader.ReadInt32());
-        }
-
-        public static uint[][] ReadUInt32ArrayArray(this BinaryReader reader)
-        {
-            return ReadArray(reader.ReadUInt32Array, reader.ReadInt32());
         }
 
         public static uint[] ReadUInt32Array(this BinaryReader reader, int length)

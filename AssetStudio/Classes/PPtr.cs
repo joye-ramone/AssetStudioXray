@@ -101,43 +101,6 @@ namespace AssetStudio
             return false;
         }
 
-        public void Set(T m_Object)
-        {
-            var name = m_Object.assetsFile.fileName;
-            if (string.Equals(_assetsFile.fileName, name, StringComparison.OrdinalIgnoreCase))
-            {
-                m_FileID = 0;
-            }
-            else
-            {
-                m_FileID = _assetsFile.m_Externals.FindIndex(x => string.Equals(x.fileName, name, StringComparison.OrdinalIgnoreCase));
-                if (m_FileID == -1)
-                {
-                    _assetsFile.m_Externals.Add(new FileIdentifier
-                    {
-                        fileName = m_Object.assetsFile.fileName
-                    });
-                    m_FileID = _assetsFile.m_Externals.Count;
-                }
-                else
-                {
-                    m_FileID += 1;
-                }
-            }
-
-            var assetsManager = _assetsFile.assetsManager;
-            var assetsFileList = assetsManager.assetsFileList;
-            var assetsFileIndexCache = assetsManager.assetsFileIndexCache;
-
-            if (!assetsFileIndexCache.TryGetValue(name, out _index))
-            {
-                _index = assetsFileList.FindIndex(x => x.fileName.Equals(name, StringComparison.OrdinalIgnoreCase));
-                assetsFileIndexCache.Add(name, _index);
-            }
-
-            m_PathID = m_Object.m_PathID;
-        }
-
         public bool IsNull => m_PathID == 0 || m_FileID < 0;
     }
 }

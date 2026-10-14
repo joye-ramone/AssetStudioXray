@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -21,39 +21,6 @@ namespace AssetStudio
         public StreamingInfo m_DataStreamData; //Tuanjie
 
         public Texture2D() { }
-
-        public Texture2D(Texture2DArray m_Texture2DArray, int layer) // Texture2DArrayImage
-        {
-            reader = m_Texture2DArray.reader;
-            assetsFile = m_Texture2DArray.assetsFile;
-            version = m_Texture2DArray.version;
-            platform = m_Texture2DArray.platform;
-
-            m_Name = $"{m_Texture2DArray.m_Name}_{layer + 1}";
-            type = ClassIDType.Texture2DArrayImage;
-            m_PathID = m_Texture2DArray.m_PathID;
-
-            m_Width = m_Texture2DArray.m_Width;
-            m_Height = m_Texture2DArray.m_Height;
-            m_TextureFormat = m_Texture2DArray.m_Format.ToTextureFormat();
-            m_MipCount = m_Texture2DArray.m_MipCount;
-            m_TextureSettings = m_Texture2DArray.m_TextureSettings;
-            m_StreamData = m_Texture2DArray.m_StreamData;
-            m_PlatformBlob = Array.Empty<byte>();
-            m_MipMap = m_MipCount > 1;
-            m_ImageCount = 1;
-
-            //var imgActualDataSize = GetImageDataSize(m_TextureFormat);
-            //var mipmapSize = (int)(m_Texture2DArray.m_DataSize / m_Texture2DArray.m_Depth - imgActualDataSize);
-            m_CompleteImageSize = (uint)(m_Texture2DArray.m_DataSize / m_Texture2DArray.m_Depth);
-            var offset = layer * m_CompleteImageSize + m_Texture2DArray.image_data.Offset;
-            
-            image_data = !string.IsNullOrEmpty(m_StreamData?.path) 
-                ? new ResourceReader(m_StreamData.path, assetsFile, offset, m_CompleteImageSize) 
-                : new ResourceReader(reader, offset, m_CompleteImageSize);
-
-            byteSize = (uint)(m_Width * m_Height) * 4;
-        }
 
         public Texture2D(ObjectReader reader, byte[] type, JsonSerializerOptions jsonOptions) : base(reader)
         {
@@ -173,64 +140,5 @@ namespace AssetStudio
                 : new ResourceReader(reader, reader.BaseStream.Position, image_data_size);
         }
 
-        // https://docs.unity3d.com/2023.3/Documentation/Manual/class-TextureImporterOverride.html
-        private int GetImageDataSize(TextureFormat textureFormat)
-        {
-            var imgDataSize = m_Width * m_Height;
-            switch (textureFormat)
-            {
-                case TextureFormat.ASTC_RGBA_5x5:
-                    // https://registry.khronos.org/webgl/extensions/WEBGL_compressed_texture_astc/
-                    imgDataSize = (int)(MathF.Floor((m_Width + 4) / 5f) * MathF.Floor((m_Height + 4) / 5f) * 16);
-                    break;
-                case TextureFormat.ASTC_RGBA_6x6:
-                    imgDataSize = (int)(MathF.Floor((m_Width + 5) / 6f) * MathF.Floor((m_Height + 5) / 6f) * 16);
-                    break;
-                case TextureFormat.ASTC_RGBA_8x8:
-                    imgDataSize = (int)(MathF.Floor((m_Width + 7) / 8f) * MathF.Floor((m_Height + 7) / 8f) * 16);
-                    break;
-                case TextureFormat.ASTC_RGBA_10x10:
-                    imgDataSize = (int)(MathF.Floor((m_Width + 9) / 10f) * MathF.Floor((m_Height + 9) / 10f) * 16);
-                    break;
-                case TextureFormat.ASTC_RGBA_12x12:
-                    imgDataSize = (int)(MathF.Floor((m_Width + 11) / 12f) * MathF.Floor((m_Height + 11) / 12f) * 16);
-                    break;
-                case TextureFormat.DXT1:
-                case TextureFormat.EAC_R:
-                case TextureFormat.EAC_R_SIGNED:
-                case TextureFormat.ATC_RGB4:
-                case TextureFormat.ETC_RGB4:
-                case TextureFormat.ETC2_RGB:
-                case TextureFormat.ETC2_RGBA1:
-                case TextureFormat.PVRTC_RGBA4:
-                    imgDataSize /= 2;
-                    break;
-                case TextureFormat.PVRTC_RGBA2:
-                    imgDataSize /= 4;
-                    break;
-                case TextureFormat.R16:
-                case TextureFormat.RGB565:
-                    imgDataSize *= 2;
-                    break;
-                case TextureFormat.RGB24:
-                    imgDataSize *= 3;
-                    break;
-                case TextureFormat.RG32:
-                case TextureFormat.RGBA32:
-                case TextureFormat.ARGB32:
-                case TextureFormat.BGRA32:
-                case TextureFormat.RGB9e5Float:
-                    imgDataSize *= 4;
-                    break;
-                case TextureFormat.RGB48:
-                    imgDataSize *= 6;
-                    break;
-                case TextureFormat.RGBAHalf:
-                case TextureFormat.RGBA64:
-                    imgDataSize *= 8;
-                    break;
-            }
-            return imgDataSize;
-        }
     }
 }

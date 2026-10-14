@@ -359,11 +359,6 @@ namespace AssetStudio
             return FullVersion;
         }
 
-        public Tuple<int, int, int> ToTuple()
-        {
-            return new Tuple<int, int, int>(Major, Minor, Patch);
-        }
-
         public int[] ToArray()
         {
             return new[] {Major, Minor, Patch};

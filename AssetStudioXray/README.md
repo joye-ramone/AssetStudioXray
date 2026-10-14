@@ -38,7 +38,7 @@ AssetStudioXray <command> [arguments] [--game <Tarkov dir>] [--mods <dir>] [--ou
 - `--shaders` also loads the game's `shaders` bundle (380 MB, about 2 s more) and writes the shaders of those materials:
   `shaders\<name>_<path id>.json` (properties, keywords, passes with render state, constant buffer layouts, programs with their keywords)
   and each D3D11 program as `.dxbc` plus its disassembly `.asm` (d3dcompiler_47.dll), headed by the constant buffer layout (`cb0[7].x
-  _ShotVals`). Unity 2021+ shaders are read through their type tree (AssetStudio does not parse them). A shader with more than
+  _ShotVals`). Shaders are read through their type tree (the library keeps no Shader class). A shader with more than
   `--shader-max` programs (default 256, 0 = no limit) gets the list only: Tarkov's weapon surface shader has 16244 (214 MB).
 - `catalog`: one JSON per group (`assets/content/<a>/<b>`, usable items one level deeper) with the group's bundles, models (renderers,
   vertices, bones, materials, textures), textures, animator controllers (states per layer with their clips), override controllers,
