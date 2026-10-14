@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
 namespace AssetStudioXray
@@ -31,13 +32,18 @@ namespace AssetStudioXray
     //   shaders\<name>_<path id>.json       the shaders of those materials when loaded (--shaders): properties, keywords, passes with render
     //                                       state, constant buffer layouts, programs; shaders\<name>_<path id>\*.dxbc + .asm up to --shader-max
     //                                       programs per shader (ShaderExport.cs)
+    //   meshes\<name>_<path id>.json + .bin own meshes that exported behaviours reference but no exported renderer draws (Tarkov's
+    //                                       ScopeReticle.Mesh: a scope's reticle drawn into its optic camera): the model.json mesh layout plus
+    //                                       blend shape frames (weight, vertex indices, position deltas), used_by the behaviour ids
     //   audio\<name>.wav                    AudioClips the own objects reach (own bundles and the sound banks)
     //   text\<name>.bytes                   own TextAssets (raw)
     // Binary layout: every array is a little-endian block in the .bin of its json, referenced as {"offset", "count", "type"} (f32, i32, u32).
     // Matrices are row-major (row 0 first), Unity column-vector convention (p' = M p).
     internal static partial class XrayExporter
     {
-        private static readonly JsonSerializerOptions jsonOptions = new JsonSerializerOptions { WriteIndented = true };
+        // non-finite floats (a material's _CameraFadeParams = Infinity, the EOTech Vudu / S&B PM II scopes) as "Infinity" / "NaN" strings:
+        // System.Text.Json throws on them by default and the whole dump stopped
+        private static readonly JsonSerializerOptions jsonOptions = new JsonSerializerOptions { WriteIndented = true, NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals };
 
         private sealed class BinWriter : IDisposable
         {
@@ -163,6 +169,7 @@ namespace AssetStudioXray
             foreach (var m in all.OfType<Material>().Where(Own))
                 AddUse(materialUse, m, null);
             CollectRendererMaterials(all.Where(Own), refs, materialUse);
+            var meshUse = new Dictionary<Mesh, List<string>>();
             var behaviours = 0;
             while (queue.Count > 0 && behaviours < 20000)
             {
@@ -178,6 +185,12 @@ namespace AssetStudioXray
                             audio.Add(ac);
                         else if (r is Material mat)
                             AddUse(materialUse, mat, "behaviour " + BehaviourId(mb));
+                        else if (r is Mesh mesh && Own(mesh))
+                        {
+                            if (!meshUse.TryGetValue(mesh, out var users))
+                                meshUse[mesh] = users = new List<string>();
+                            users.Add(BehaviourId(mb));
+                        }
                         else if (r is MonoBehaviour m && Follow(m) && seenMb.Add(m))
                             queue.Enqueue(m);
                     }
@@ -185,6 +198,28 @@ namespace AssetStudioXray
                 catch (Exception ex)
                 {
                     Logger.Error($"[xray] behaviour {mb.m_PathID}: {ex.Message}");
+                }
+            }
+            // the referenced meshes no exported renderer has (a renderer's mesh is in its model.json already)
+            var drawn = new HashSet<Mesh>();
+            foreach (var o in all.Where(Own))
+            {
+                if (o is SkinnedMeshRenderer smr && smr.m_Mesh.TryGet(out var sm))
+                    drawn.Add(sm);
+                else if (o is MeshFilter mf && mf.m_Mesh.TryGet(out var fm))
+                    drawn.Add(fm);
+            }
+            var meshes = 0;
+            foreach (var (mesh, users) in meshUse.Where(kv => !drawn.Contains(kv.Key)).OrderBy(kv => kv.Key.m_Name))
+            {
+                try
+                {
+                    ExportMesh(mesh, Path.Combine(outDir, "meshes"), users);
+                    meshes++;
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"[xray] mesh {mesh.m_Name}: {ex.Message}");
                 }
             }
             var wavs = 0;
@@ -233,8 +268,8 @@ namespace AssetStudioXray
                 Directory.CreateDirectory(Path.Combine(outDir, "text"));
                 File.WriteAllBytes(Path.Combine(outDir, "text", Safe(ta.m_Name) + ".bytes"), ta.m_Script);
             }
-            Logger.Info($"[xray] {modelNames.Count} models, {clips.Count} clips, {ctrls.Count} controllers, {overrides.Count} override controllers, {avatars.Count} avatars, {textures.Count} textures, {materials} materials, {shaders} shaders, {behaviours} behaviours, {colliders} physics components, {wavs} of {audio.Count} audio clips, {texts.Count} text assets -> {outDir}");
-            return new { models = modelNames.ToArray(), clips = clips.Count, controllers = ctrls.Count, overrides = overrides.Count, avatars = avatars.Count, textures = textures.Count, materials, shaders, behaviours, physics = colliders, audio = wavs, objects = all.Count };
+            Logger.Info($"[xray] {modelNames.Count} models, {clips.Count} clips, {ctrls.Count} controllers, {overrides.Count} override controllers, {avatars.Count} avatars, {textures.Count} textures, {materials} materials, {shaders} shaders, {behaviours} behaviours, {meshes} behaviour meshes, {colliders} physics components, {wavs} of {audio.Count} audio clips, {texts.Count} text assets -> {outDir}");
+            return new { models = modelNames.ToArray(), clips = clips.Count, controllers = ctrls.Count, overrides = overrides.Count, avatars = avatars.Count, textures = textures.Count, materials, shaders, behaviours, meshes, physics = colliders, audio = wavs, objects = all.Count };
         }
 
         private static readonly HashSet<ClassIDType> PhysicsClasses = new HashSet<ClassIDType> { ClassIDType.BoxCollider, ClassIDType.SphereCollider, ClassIDType.CapsuleCollider, ClassIDType.MeshCollider, ClassIDType.Rigidbody, ClassIDType.CharacterJoint, ClassIDType.FixedJoint, ClassIDType.HingeJoint, ClassIDType.ConfigurableJoint, ClassIDType.PhysicMaterial };
@@ -572,53 +607,90 @@ namespace AssetStudioXray
                     colors = mat.m_SavedProperties.m_Colors?.ToDictionary(x => x.Key, x => new[] { x.Value.R, x.Value.G, x.Value.B, x.Value.A }),
                 });
             }
-            object jm = null;
-            if (mesh != null)
+            var jm = mesh != null ? MeshJson(mesh, bin, false) : null;
+            return new { node, kind = r is SkinnedMeshRenderer ? "skinned" : "mesh", bones, materials, mesh = jm };
+        }
+
+        // a mesh's decoded streams in the .bin; with shapes also the blend shape frames: per channel its frames with the full weight, the
+        // vertex indices and the position deltas (x, y, z)
+        private static object MeshJson(Mesh mesh, BinWriter bin, bool shapes)
+        {
+            var subs = new List<object>();
+            var first = 0;
+            for (var s = 0; s < mesh.m_SubMeshes.Length; s++)
             {
-                var subs = new List<object>();
-                var first = 0;
-                for (var s = 0; s < mesh.m_SubMeshes.Length; s++)
+                var sm = mesh.m_SubMeshes[s];
+                var n = sm.topology == GfxPrimitiveType.Triangles ? (int)sm.indexCount : (int)sm.indexCount / 4 * 6;
+                n = Math.Min(n, mesh.m_Indices.Count - first);
+                subs.Add(new { topology = sm.topology.ToString(), indices = bin.U(mesh.m_Indices.Skip(first).Take(n)) });
+                first += n;
+            }
+            var vc = mesh.m_VertexCount;
+            object skin = null;
+            if (mesh.m_Skin?.Length > 0)
+            {
+                skin = new
                 {
-                    var sm = mesh.m_SubMeshes[s];
-                    var n = sm.topology == GfxPrimitiveType.Triangles ? (int)sm.indexCount : (int)sm.indexCount / 4 * 6;
-                    n = Math.Min(n, mesh.m_Indices.Count - first);
-                    subs.Add(new { topology = sm.topology.ToString(), indices = bin.U(mesh.m_Indices.Skip(first).Take(n)) });
-                    first += n;
-                }
-                var vc = mesh.m_VertexCount;
-                object skin = null;
-                if (mesh.m_Skin?.Length > 0)
-                {
-                    skin = new
-                    {
-                        indices = bin.I(mesh.m_Skin.SelectMany(x => x.boneIndex)),
-                        weights = bin.F(mesh.m_Skin.SelectMany(x => x.weight)),
-                    };
-                }
-                var uvs = new Dictionary<string, object>();
-                for (var u = 0; u < 8; u++)
-                {
-                    var a = mesh.GetUV(u);
-                    if (a != null && a.Length > 0)
-                        uvs["uv" + u] = new { dim = a.Length / vc, data = bin.F(a) };
-                }
-                jm = new
-                {
-                    name = mesh.m_Name,
-                    vertex_count = vc,
-                    positions = new { dim = mesh.m_Vertices.Length / vc, data = bin.F(mesh.m_Vertices) },
-                    normals = mesh.m_Normals?.Length > 0 ? new { dim = mesh.m_Normals.Length / vc, data = bin.F(mesh.m_Normals) } : null,
-                    tangents = mesh.m_Tangents?.Length > 0 ? new { dim = mesh.m_Tangents.Length / vc, data = bin.F(mesh.m_Tangents) } : null,
-                    colors = mesh.m_Colors?.Length > 0 ? new { dim = mesh.m_Colors.Length / vc, data = bin.F(mesh.m_Colors) } : null,
-                    uvs,
-                    submeshes = subs,
-                    skin,
-                    bind_poses = mesh.m_BindPose?.Length > 0 ? bin.F(mesh.m_BindPose.SelectMany(m => new[] { m.M00, m.M10, m.M20, m.M30, m.M01, m.M11, m.M21, m.M31, m.M02, m.M12, m.M22, m.M32, m.M03, m.M13, m.M23, m.M33 })) : null,
-                    bone_name_hashes = mesh.m_BoneNameHashes,
-                    blend_shapes = mesh.m_Shapes?.channels?.Select(c => c.name).ToArray(),
+                    indices = bin.I(mesh.m_Skin.SelectMany(x => x.boneIndex)),
+                    weights = bin.F(mesh.m_Skin.SelectMany(x => x.weight)),
                 };
             }
-            return new { node, kind = r is SkinnedMeshRenderer ? "skinned" : "mesh", bones, materials, mesh = jm };
+            var uvs = new Dictionary<string, object>();
+            for (var u = 0; u < 8; u++)
+            {
+                var a = mesh.GetUV(u);
+                if (a != null && a.Length > 0)
+                    uvs["uv" + u] = new { dim = a.Length / vc, data = bin.F(a) };
+            }
+            object frames = null;
+            var bs = mesh.m_Shapes;
+            if (shapes && bs?.channels?.Length > 0)
+            {
+                frames = bs.channels.Select(c => new
+                {
+                    name = c.name,
+                    frames = Enumerable.Range(c.frameIndex, c.frameCount).Where(fi => fi < bs.shapes.Length).Select(fi =>
+                    {
+                        var sh = bs.shapes[fi];
+                        var vs = bs.vertices.Skip((int)sh.firstVertex).Take((int)sh.vertexCount).ToList();
+                        return new
+                        {
+                            weight = fi < bs.fullWeights?.Length ? bs.fullWeights[fi] : 100f,
+                            indices = bin.U(vs.Select(v => v.index)),
+                            deltas = bin.F(vs.SelectMany(v => new[] { v.vertex.X, v.vertex.Y, v.vertex.Z })),
+                        };
+                    }).ToArray(),
+                }).ToArray();
+            }
+            return new
+            {
+                name = mesh.m_Name,
+                vertex_count = vc,
+                positions = new { dim = mesh.m_Vertices.Length / vc, data = bin.F(mesh.m_Vertices) },
+                normals = mesh.m_Normals?.Length > 0 ? new { dim = mesh.m_Normals.Length / vc, data = bin.F(mesh.m_Normals) } : null,
+                tangents = mesh.m_Tangents?.Length > 0 ? new { dim = mesh.m_Tangents.Length / vc, data = bin.F(mesh.m_Tangents) } : null,
+                colors = mesh.m_Colors?.Length > 0 ? new { dim = mesh.m_Colors.Length / vc, data = bin.F(mesh.m_Colors) } : null,
+                uvs,
+                submeshes = subs,
+                skin,
+                bind_poses = mesh.m_BindPose?.Length > 0 ? bin.F(mesh.m_BindPose.SelectMany(m => new[] { m.M00, m.M10, m.M20, m.M30, m.M01, m.M11, m.M21, m.M31, m.M02, m.M12, m.M22, m.M32, m.M03, m.M13, m.M23, m.M33 })) : null,
+                bone_name_hashes = mesh.m_BoneNameHashes,
+                blend_shapes = bs?.channels?.Select(c => c.name).ToArray(),
+                blend_shape_frames = frames,
+            };
+        }
+
+        // a mesh no exported renderer draws (a behaviour's): meshes\<name>_<path id>.json + .bin, the model.json mesh layout with the
+        // blend shape frames
+        private static void ExportMesh(Mesh mesh, string dir, List<string> users)
+        {
+            Directory.CreateDirectory(dir);
+            var name = Safe(mesh.m_Name) + "_" + mesh.m_PathID;
+            object jm;
+            using (var bin = new BinWriter(Path.Combine(dir, name + ".bin")))
+                jm = MeshJson(mesh, bin, true);
+            WriteJson(Path.Combine(dir, name + ".json"), new { name = mesh.m_Name, file = mesh.assetsFile.fileName, path_id = mesh.m_PathID, used_by = users.Distinct().ToArray(), mesh = jm });
+            Logger.Info($"[xray] mesh {mesh.m_Name}: {mesh.m_VertexCount} vertices, used by {string.Join(", ", users.Distinct())} -> {dir}");
         }
 
         private static void ExportClip(AnimationClip clip, string dir, string name)
