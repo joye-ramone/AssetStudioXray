@@ -6,7 +6,7 @@ of this repo; no FBX. Reads the game files only.
 
 ```
 dotnet build AssetStudioXray\AssetStudioXray.csproj -c Release
-AssetStudioXray <command> [arguments] [--game <Tarkov dir>] [--out <dir>] [--deps none|content|all] [--filter <text>] [--no-textures] [--no-audio] [--shaders [--shader-max N]] [--clean]
+AssetStudioXray <command> [arguments] [--game <Tarkov dir>] [--mods <dir>] [--out <dir>] [--deps none|content|all] [--filter <text>] [--no-textures] [--no-audio] [--shaders [--shader-max N]] [--clean]
   list <text>                    bundles and item templates whose path / name contains the text
   weapon <name|id> [--preset P]  weapon prefab + the mods of its default preset (or preset P)  -> <out>\weapons\<name>
   hands <name>                   hands bundle(s) (folder or file name) + the player skeleton    -> <out>\hands\<name>
@@ -18,6 +18,17 @@ AssetStudioXray <command> [arguments] [--game <Tarkov dir>] [--out <dir>] [--dep
 - Bundles and their dependencies come from `EscapeFromTarkov_Data\StreamingAssets\Windows\Windows.json`; item templates (prefab bundle)
   and weapon presets (default mods per slot) from the SPT database (`SPT_Data\Server\database` or, SPT 4.x,
   `SPT_Runtime\SPT_Data\database`: `templates\items.json`, `globals.json`).
+- `--mods <dir>` (repeatable, or `TARKOV_MODS` with `;` between folders): SPT server mods, a folder of mods (`SPT_Runtime\user\mods`) or
+  one mod folder. Each mod's `bundles.json` (`manifest`: `key`, `dependencyKeys`; files under `<mod>\bundles\<key>`) adds its bundles;
+  a key the game (or an earlier mod, by folder name) has is replaced, as the SPT server does, so a game weapon dumped with `--mods`
+  takes a mod's replacement bundle. Every `db\**\*.json` (UTF-8 BOM, comments and trailing commas allowed) adds item templates (WTT
+  CommonLib `overrideProperties` / `itemTplToClone` / `locales`, plain `_props` templates) and presets (`weaponPresets` / `presets` of an
+  item, preset files, `ItemPresets`); a mod preset with a game preset's id replaces it. A mod item's name is its override `Name`, else
+  its prefab file (without `_container.bundle`), else its English name; lookups match the English name too, and an exact name the game
+  and mod variants share picks the game's template (a variant by id). Mod bundle keys outside `assets/` (`Mods/<weapon>/...`, flat
+  file names) count as content; a flat-key own bundle exports the flat-key dependencies of its mod. `list` shows the mod of each
+  bundle and item; `manifest.json` gets `mods` and `bundle_mods` (loaded bundle -> mod). Without `--mods` the output is unchanged.
+- `hands` also finds the mods' first-person sleeves in `fphands` folders.
 - `--deps content` (default) loads the dependencies under `assets/content/` except audio and the shared generated animation sets
   (`weapons/animations/*`: the `_simple` / `_spirit` clips, hundreds of MB), and the small effect bundles under `assets/systems/effects/`
   (muzzle flash, smoke, heat haze: the weapons' muzzle effect materials); they resolve references (controllers using clips of other

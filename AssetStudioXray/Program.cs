@@ -27,6 +27,10 @@ commands:
 
 options:
   --game <dir>       Tarkov install folder (default: environment TARKOV_DIR)
+  --mods <dir>       SPT server mods (repeatable; default: environment TARKOV_MODS, folders split by ';'): a folder of mods
+                     (SPT_Runtime\user\mods) or one mod folder. Each mod's bundles.json adds its bundles (<mod>\bundles\<key>; a key
+                     the game or an earlier mod has is replaced, as the SPT server does) and its db\**\*.json the item templates
+                     (WTT CommonLib overrideProperties / locales, plain templates) and weapon presets; list shows the mod of each
   --out <dir>        output root (default: environment XRAY_DUMP_DIR, else .\xray_dump)
   --deps <mode>      none | content (default: dependencies under assets/content/ without audio and shared animation sets, and the
                      effect bundles under assets/systems/effects/: muzzle flash, smoke, heat haze materials) | all
@@ -48,6 +52,7 @@ options:
             public string Command;
             public List<string> Args = new List<string>();
             public string Game = Environment.GetEnvironmentVariable("TARKOV_DIR");
+            public List<string> Mods = (Environment.GetEnvironmentVariable("TARKOV_MODS") ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
             public string Out = Environment.GetEnvironmentVariable("XRAY_DUMP_DIR") ?? Path.Combine(".", "xray_dump");
             public string Deps = "content";
             public string Preset;
@@ -115,6 +120,7 @@ options:
                 switch (argv[i])
                 {
                     case "--game": o.Game = Next(); break;
+                    case "--mods": o.Mods.Add(Next()); break;
                     case "--out": case "-o": o.Out = Next(); break;
                     case "--deps": o.Deps = Next().ToLowerInvariant(); break;
                     case "--preset": o.Preset = Next(); break;
@@ -146,7 +152,7 @@ options:
 
         private static int Run(Options o)
         {
-            var tk = new Tarkov(o.Game);
+            var tk = new Tarkov(o.Game, o.Mods);
             var query = string.Join(" ", o.Args);
             if (o.Command == "list")
                 return List(tk, query);
@@ -155,6 +161,8 @@ options:
 
             var own = new List<string>();
             var info = new Dictionary<string, object> { ["command"] = o.Command, ["query"] = query, ["game"] = o.Game, ["deps"] = o.Deps };
+            if (o.Mods.Count > 0)
+                info["mods"] = o.Mods;
             string outName;
             switch (o.Command)
             {
@@ -163,8 +171,10 @@ options:
                 {
                     var item = tk.FindItem(query, o.Command == "weapon" ? "assets/content/weapons/" : null, out var cands);
                     if (item == null)
-                        return Ambiguous(query, cands.Select(c => $"{c.Name}  ({c.Id}, {c.Prefab})"));
-                    info["template"] = new { id = item.Id, name = item.Name, parent = item.Parent, prefab = item.Prefab };
+                        return Ambiguous(query, cands.Select(c => $"{c.Name}  ({c.Id}, {c.Prefab}){(c.Title != null ? $"  \"{c.Title}\"" : "")}{(c.Mod != null ? $"  [mod {c.Mod}]" : "")}"));
+                    info["template"] = item.Mod == null ? new { id = item.Id, name = item.Name, parent = item.Parent, prefab = item.Prefab } : new { id = item.Id, name = item.Name, parent = item.Parent, prefab = item.Prefab, title = item.Title, mod = item.Mod };
+                    if (item.Mod != null || tk.ModOf(item.Prefab) != null)
+                        Console.WriteLine($"{item.Name}: template from {item.Mod ?? "the game"}, bundle from {tk.ModOf(item.Prefab) ?? "the game"}");
                     own.Add(item.Prefab);
                     outName = item.Name;
                     if (o.Command == "weapon")
@@ -187,9 +197,10 @@ options:
                 }
                 case "hands":
                 {
-                    var hands = tk.Bundles.Keys.Where(k => k.StartsWith("assets/content/hands/", StringComparison.OrdinalIgnoreCase)).ToList();
+                    // the game's and the mods' hands skins; mods also keep first-person sleeves in their own folders (WTT "fphands/<top>_hands")
+                    var hands = tk.Bundles.Keys.Where(k => k.StartsWith("assets/content/hands/", StringComparison.OrdinalIgnoreCase) || (tk.ModOf(k) != null && k.Split('/').Any(s => s.Equals("fphands", StringComparison.OrdinalIgnoreCase)))).ToList();
                     string File(string k) => Path.GetFileNameWithoutExtension(k.Substring(k.LastIndexOf('/') + 1));
-                    string Folder(string k) => k.Split('/')[3];
+                    string Folder(string k) => k.Split('/') is var p && p.Length > 4 ? p[3] : "";
                     var byFile = hands.Where(k => File(k).Equals(query, StringComparison.OrdinalIgnoreCase) || File(k).Equals(query + ".skin", StringComparison.OrdinalIgnoreCase)).ToList();
                     var byFolder = hands.Where(k => Folder(k).Equals(query, StringComparison.OrdinalIgnoreCase) || Folder(k).Equals("hands_" + query, StringComparison.OrdinalIgnoreCase)).ToList();
                     var pick = byFile.Count > 0 ? byFile : byFolder;
@@ -224,8 +235,12 @@ options:
             var load = tk.Resolve(own, o.Deps, o.Audio, o.Shaders, skipped);
             // own bundles and the dependencies in their folders (textures, client_assets with the model and clips) are the ones exported;
             // the other dependencies only resolve references (base controllers, shared clips, materials)
-            var ownDirs = own.Select(k => k.Substring(0, k.LastIndexOf('/') + 1)).Distinct().ToList();
-            var primary = new HashSet<string>(load.Where(k => own.Contains(k, StringComparer.OrdinalIgnoreCase) || ownDirs.Any(d => k.StartsWith(d, StringComparison.OrdinalIgnoreCase))), StringComparer.OrdinalIgnoreCase);
+            // (a mod bundle with a flat key, no folder: the flat-key dependencies of the same mod, makeshotgunsgreatagain's vr80_assets)
+            string Dir(string k) => k.Substring(0, k.LastIndexOf('/') + 1);
+            var ownDirs = own.Select(Dir).Where(d => d.Length > 0).Distinct().ToList();
+            var flatMods = own.Where(k => Dir(k).Length == 0 && tk.ModOf(k) != null).Select(tk.ModOf).ToHashSet();
+            bool OwnFolder(string k) => Dir(k) is var d && (d.Length > 0 ? ownDirs.Any(x => d.StartsWith(x, StringComparison.OrdinalIgnoreCase)) : flatMods.Contains(tk.ModOf(k) ?? ""));
+            var primary = new HashSet<string>(load.Where(k => own.Contains(k, StringComparer.OrdinalIgnoreCase) || OwnFolder(k)), StringComparer.OrdinalIgnoreCase);
             var missing = load.Where(k => !System.IO.File.Exists(tk.BundlePath(k))).ToList();
             foreach (var m in missing)
                 Logger.Warning($"bundle file missing: {m}");
@@ -246,9 +261,15 @@ options:
             }
             var primaryPaths = new HashSet<string>(primary.Select(k => Path.GetFullPath(tk.BundlePath(k))), StringComparer.OrdinalIgnoreCase);
             bool IsPrimary(SerializedFile f) => primaryPaths.Contains(Path.GetFullPath(f.originalPath ?? f.fullName));
-            string KeyOf(SerializedFile f) => Path.GetRelativePath(tk.BundleRoot, f.originalPath ?? f.fullName).Replace('\\', '/');
+            string KeyOf(SerializedFile f) => tk.KeyOf(f.originalPath ?? f.fullName);
 
             info["own"] = own;
+            var fromMods = load.Where(k => tk.ModOf(k) != null).ToDictionary(k => k, tk.ModOf);
+            if (fromMods.Count > 0)
+            {
+                info["bundle_mods"] = fromMods;
+                Console.WriteLine($"{fromMods.Count} bundles from mods: {string.Join(", ", fromMods.Values.Distinct())}");
+            }
             info["loaded"] = load;
             info["exported"] = primary.ToList();
             info["skipped"] = skipped;
@@ -319,12 +340,14 @@ options:
 
         private static int List(Tarkov tk, string text)
         {
+            string From(string mod) => mod != null ? $"  [mod {mod}]" : "";
             foreach (var k in tk.Bundles.Keys.Where(k => k.IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0).OrderBy(k => k))
-                Console.WriteLine($"bundle  {k}  ({tk.Bundles[k].Dependencies.Length} deps)");
-            if (tk.HasDatabase)
+                Console.WriteLine($"bundle  {k}  ({tk.Bundles[k].Dependencies.Length} deps){From(tk.ModOf(k))}");
+            if (tk.HasDatabase || tk.Bundles.Values.Any(b => b.Mod != null))
             {
-                foreach (var i in tk.Items.Values.Where(i => i.Prefab != null && i.Name.IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0).OrderBy(i => i.Name))
-                    Console.WriteLine($"item    {i.Name}  {i.Id}  {i.Prefab}");
+                bool Hit(string s) => s != null && s.IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0;
+                foreach (var i in tk.Items.Values.Where(i => i.Prefab != null && (Hit(i.Name) || Hit(i.Title))).OrderBy(i => i.Name))
+                    Console.WriteLine($"item    {i.Name}  {i.Id}  {i.Prefab}{(i.Title != null ? $"  \"{i.Title}\"" : "")}{From(i.Mod)}");
             }
             return 0;
         }
